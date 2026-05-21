@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0a0e27">
+  <meta name="description" content="台股布林通道交易訊號系統 - 專業級技術分析平台">
+  <title>台股布林訊號 | Bollinger Band Signal System</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <div class="loading-logo">📊</div>
+      <div class="loading-spinner"></div>
+      <div class="loading-text">台股布林訊號系統載入中...</div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- App Shell -->
+  <div id="app" class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">📊</span>
+          <span class="logo-text">布林訊號</span>
+        </div>
+        <button class="sidebar-toggle" id="sidebar-toggle" aria-label="切換側邊欄">
+          <span class="toggle-icon">☰</span>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#dashboard" class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">儀表板</span>
+          <span class="nav-indicator"></span>
+        </a>
+        <a href="#screener" class="nav-item" data-page="screener">
+          <span class="nav-icon">🔍</span>
+          <span class="nav-label">訊號篩選</span>
+          <span class="nav-indicator"></span>
+        </a>
+        <a href="#analysis" class="nav-item" data-page="analysis">
+          <span class="nav-icon">📈</span>
+          <span class="nav-label">個股分析</span>
+          <span class="nav-indicator"></span>
+        </a>
+        <a href="#backtest" class="nav-item" data-page="backtest">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">回測中心</span>
+          <span class="nav-indicator"></span>
+        </a>
+        <a href="#journal" class="nav-item" data-page="journal">
+          <span class="nav-icon">📒</span>
+          <span class="nav-label">交易紀錄</span>
+          <span class="nav-indicator"></span>
+        </a>
+        <a href="#settings" class="nav-item" data-page="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">設定</span>
+          <span class="nav-indicator"></span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="market-status">
+          <span class="status-dot live"></span>
+          <span class="status-text">系統運行中</span>
+        </div>
+        <div class="version-info">v1.0.0</div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="選單">☰</button>
+          <h1 class="page-title" id="page-title">儀表板</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="topbar-clock" id="topbar-clock"></div>
+          <div class="topbar-market-badge">
+            <span class="market-label">TWSE</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Page Container -->
+      <div class="page-container" id="page-container">
+
+        <!-- ==================== DASHBOARD PAGE ==================== -->
+        <section class="page active" id="page-dashboard" data-page="dashboard">
+          <div class="page-inner fade-in">
+            <!-- Stat Cards Row -->
+            <div class="stats-grid">
+              <div class="stat-card gradient-cyan">
+                <div class="stat-icon">📡</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="dash-active-signals">12</div>
+                  <div class="stat-label">活躍訊號</div>
+                </div>
+                <div class="stat-trend up">+3 今日</div>
+              </div>
+              <div class="stat-card gradient-green">
+                <div class="stat-icon">💰</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="dash-total-pnl">+$128,500</div>
+                  <div class="stat-label">總損益</div>
+                </div>
+                <div class="stat-trend up">+2.3%</div>
+              </div>
+              <div class="stat-card gradient-gold">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="dash-win-rate">68.5%</div>
+                  <div class="stat-label">勝率</div>
+                </div>
+                <div class="stat-trend up">+1.2%</div>
+              </div>
+              <div class="stat-card gradient-purple">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="dash-monitored">45</div>
+                  <div class="stat-label">監控股數</div>
+                </div>
+                <div class="stat-trend neutral">持平</div>
+              </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="dashboard-grid">
+              <!-- Recent Signals -->
+              <div class="card card-lg">
+                <div class="card-header">
+                  <h3 class="card-title">
+                    <span class="title-icon">🔔</span> 最新訊號
+                  </h3>
+                  <button class="btn btn-sm btn-ghost" onclick="App.refreshSignals()">重新整理</button>
+                </div>
+                <div class="card-body">
+                  <div class="signal-list" id="dash-signal-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+              </div>
+
+              <!-- Trend Distribution -->
+              <div class="card card-md">
+                <div class="card-header">
+                  <h3 class="card-title">
+                    <span class="title-icon">📈</span> 趨勢分佈
+                  </h3>
+                </div>
+                <div class="card-body">
+                  <div class="chart-container-sm">
+                    <canvas id="dash-trend-chart"></canvas>
+                  </div>
+                  <div class="trend-legend" id="dash-trend-legend"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Second Row -->
+            <div class="dashboard-grid">
+              <!-- P&L Chart -->
+              <div class="card card-md">
+                <div class="card-header">
+                  <h3 class="card-title">
+                    <span class="title-icon">💹</span> 近期損益曲線
+                  </h3>
+                </div>
+                <div class="card-body">
+                  <div class="chart-container-sm">
+                    <canvas id="dash-pnl-chart"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Top Performers -->
+              <div class="card card-lg">
+                <div class="card-header">
+                  <h3 class="card-title">
+                    <span class="title-icon">🏆</span> 表現最佳
+                  </h3>
+                </div>
+                <div class="card-body">
+                  <table class="data-table compact">
+                    <thead>
+                      <tr>
+                        <th>股票</th>
+                        <th>訊號</th>
+                        <th>報酬率</th>
+                        <th>趨勢</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-top-performers">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SCREENER PAGE ==================== -->
+        <section class="page" id="page-screener" data-page="screener">
+          <div class="page-inner fade-in">
+            <!-- Filters -->
+            <div class="card filter-bar">
+              <div class="filter-group">
+                <label class="filter-label">訊號類型</label>
+                <div class="btn-group" id="screener-signal-filter">
+                  <button class="btn btn-sm btn-filter active" data-value="ALL">全部</button>
+                  <button class="btn btn-sm btn-filter" data-value="BUY">買入</button>
+                  <button class="btn btn-sm btn-filter" data-value="SELL">賣出</button>
+                </div>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">趨勢方向</label>
+                <div class="btn-group" id="screener-trend-filter">
+                  <button class="btn btn-sm btn-filter active" data-value="ALL">全部</button>
+                  <button class="btn btn-sm btn-filter" data-value="UPTREND">上升</button>
+                  <button class="btn btn-sm btn-filter" data-value="DOWNTREND">下降</button>
+                  <button class="btn btn-sm btn-filter" data-value="SIDEWAYS">盤整</button>
+                </div>
+              </div>
+              <div class="filter-group">
+                <label class="filter-label">自動更新</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="screener-auto-refresh">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Results Table -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">
+                  <span class="title-icon">🔍</span> 篩選結果
+                  <span class="badge badge-cyan" id="screener-count">0</span>
+                </h3>
+                <button class="btn btn-sm btn-primary" onclick="Screener.refresh()">
+                  🔄 重新篩選
+                </button>
+              </div>
+              <div class="card-body table-wrapper">
+                <table class="data-table" id="screener-table">
+                  <thead>
+                    <tr>
+                      <th>狀態</th>
+                      <th>股票代碼</th>
+                      <th>股票名稱</th>
+                      <th>訊號</th>
+                      <th>趨勢</th>
+                      <th>收盤價</th>
+                      <th>漲跌幅</th>
+                      <th>訊號日期</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="screener-tbody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== ANALYSIS PAGE ==================== -->
+        <section class="page" id="page-analysis" data-page="analysis">
+          <div class="page-inner fade-in">
+            <!-- Stock Search -->
+            <div class="card search-bar">
+              <div class="search-input-group">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="search-input" id="analysis-search" placeholder="輸入股票代碼或名稱，例如：2330 台積電" autocomplete="off">
+                <button class="btn btn-primary" id="analysis-search-btn" onclick="Analysis.searchStock()">分析</button>
+              </div>
+              <div class="quick-picks" id="analysis-quick-picks">
+                <button class="btn btn-sm btn-ghost" onclick="Analysis.loadStock('2330')">2330 台積電</button>
+                <button class="btn btn-sm btn-ghost" onclick="Analysis.loadStock('2454')">2454 聯發科</button>
+                <button class="btn btn-sm btn-ghost" onclick="Analysis.loadStock('2317')">2317 鴻海</button>
+                <button class="btn btn-sm btn-ghost" onclick="Analysis.loadStock('3008')">3008 大立光</button>
+                <button class="btn btn-sm btn-ghost" onclick="Analysis.loadStock('2881')">2881 富邦金</button>
+              </div>
+            </div>
+
+            <!-- Stock Info Header -->
+            <div class="card stock-header" id="analysis-stock-header" style="display:none;">
+              <div class="stock-info-main">
+                <div class="stock-name-group">
+                  <span class="stock-code" id="analysis-code">2330</span>
+                  <span class="stock-name" id="analysis-name">台積電</span>
+                </div>
+                <div class="stock-price-group">
+                  <span class="stock-price" id="analysis-price">595.00</span>
+                  <span class="stock-change up" id="analysis-change">+10.00 (+1.71%)</span>
+                </div>
+              </div>
+              <div class="stock-info-badges">
+                <span class="badge" id="analysis-signal-badge">BUY</span>
+                <span class="badge" id="analysis-trend-badge">UPTREND</span>
+              </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="card" id="analysis-chart-card" style="display:none;">
+              <div class="card-header">
+                <h3 class="card-title">
+                  <span class="title-icon">📈</span> K線圖 + 布林通道
+                </h3>
+                <div class="chart-controls">
+                  <div class="btn-group" id="analysis-period-btns">
+                    <button class="btn btn-sm btn-filter" data-period="30">1M</button>
+                    <button class="btn btn-sm btn-filter active" data-period="90">3M</button>
+                    <button class="btn btn-sm btn-filter" data-period="180">6M</button>
+                    <button class="btn btn-sm btn-filter" data-period="365">1Y</button>
+                  </div>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="chart-container" id="analysis-chart-container"></div>
+              </div>
+            </div>
+
+            <!-- Analysis Details -->
+            <div class="dashboard-grid" id="analysis-details" style="display:none;">
+              <div class="card card-md">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">📊</span> 布林通道指標</h3>
+                </div>
+                <div class="card-body">
+                  <div class="indicator-grid" id="analysis-bb-indicators">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+              </div>
+              <div class="card card-lg">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">📜</span> 歷史訊號</h3>
+                </div>
+                <div class="card-body table-wrapper">
+                  <table class="data-table compact">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>訊號</th>
+                        <th>價格</th>
+                        <th>布林位置</th>
+                      </tr>
+                    </thead>
+                    <tbody id="analysis-signal-history">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== BACKTEST PAGE ==================== -->
+        <section class="page" id="page-backtest" data-page="backtest">
+          <div class="page-inner fade-in">
+            <!-- Config -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><span class="title-icon">⚙️</span> 回測設定</h3>
+              </div>
+              <div class="card-body">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="form-label">股票代碼</label>
+                    <input type="text" class="form-input" id="bt-stock-code" placeholder="例如：2330" value="2330">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">開始日期</label>
+                    <input type="date" class="form-input" id="bt-start-date" value="2025-01-01">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">結束日期</label>
+                    <input type="date" class="form-input" id="bt-end-date" value="2026-05-20">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">布林週期</label>
+                    <input type="number" class="form-input" id="bt-bb-period" value="20" min="5" max="100">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">標準差倍數</label>
+                    <input type="number" class="form-input" id="bt-bb-std" value="2" min="1" max="4" step="0.1">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">初始資金 (TWD)</label>
+                    <input type="number" class="form-input" id="bt-capital" value="1000000" min="100000" step="100000">
+                  </div>
+                </div>
+                <div class="form-actions">
+                  <button class="btn btn-primary btn-lg" id="bt-run-btn" onclick="Backtest.run()">
+                    🚀 開始回測
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Results -->
+            <div id="bt-results" style="display:none;">
+              <!-- Summary Cards -->
+              <div class="stats-grid">
+                <div class="stat-card gradient-green">
+                  <div class="stat-icon">💰</div>
+                  <div class="stat-info">
+                    <div class="stat-value" id="bt-total-return">+23.5%</div>
+                    <div class="stat-label">總報酬率</div>
+                  </div>
+                </div>
+                <div class="stat-card gradient-cyan">
+                  <div class="stat-icon">🎯</div>
+                  <div class="stat-info">
+                    <div class="stat-value" id="bt-win-rate">65.2%</div>
+                    <div class="stat-label">勝率</div>
+                  </div>
+                </div>
+                <div class="stat-card gradient-red">
+                  <div class="stat-icon">📉</div>
+                  <div class="stat-info">
+                    <div class="stat-value" id="bt-max-dd">-8.3%</div>
+                    <div class="stat-label">最大回撤</div>
+                  </div>
+                </div>
+                <div class="stat-card gradient-gold">
+                  <div class="stat-icon">⚡</div>
+                  <div class="stat-info">
+                    <div class="stat-value" id="bt-sharpe">1.85</div>
+                    <div class="stat-label">夏普比率</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Equity Curve -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">💹</span> 權益曲線</h3>
+                </div>
+                <div class="card-body">
+                  <div class="chart-container-md">
+                    <canvas id="bt-equity-chart"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Trade List -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">📋</span> 交易明細</h3>
+                </div>
+                <div class="card-body table-wrapper">
+                  <table class="data-table" id="bt-trade-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>類型</th>
+                        <th>買入日</th>
+                        <th>買入價</th>
+                        <th>賣出日</th>
+                        <th>賣出價</th>
+                        <th>損益</th>
+                        <th>報酬率</th>
+                      </tr>
+                    </thead>
+                    <tbody id="bt-trade-tbody">
+                      <!-- Populated by JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== JOURNAL PAGE ==================== -->
+        <section class="page" id="page-journal" data-page="journal">
+          <div class="page-inner fade-in">
+            <!-- Summary Stats -->
+            <div class="stats-grid">
+              <div class="stat-card gradient-cyan">
+                <div class="stat-icon">📝</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="jn-total-trades">24</div>
+                  <div class="stat-label">總交易數</div>
+                </div>
+              </div>
+              <div class="stat-card gradient-gold">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="jn-win-rate">66.7%</div>
+                  <div class="stat-label">勝率</div>
+                </div>
+              </div>
+              <div class="stat-card gradient-green">
+                <div class="stat-icon">💰</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="jn-total-pnl">+$186,400</div>
+                  <div class="stat-label">總損益</div>
+                </div>
+              </div>
+              <div class="stat-card gradient-purple">
+                <div class="stat-icon">📊</div>
+                <div class="stat-info">
+                  <div class="stat-value" id="jn-avg-return">+3.2%</div>
+                  <div class="stat-label">平均報酬</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- P&L Chart -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><span class="title-icon">💹</span> 累積損益曲線</h3>
+              </div>
+              <div class="card-body">
+                <div class="chart-container-sm">
+                  <canvas id="jn-pnl-chart"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Trade List -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title"><span class="title-icon">📒</span> 交易紀錄</h3>
+                <button class="btn btn-primary" onclick="Journal.openAddModal()">
+                  ➕ 新增交易
+                </button>
+              </div>
+              <div class="card-body table-wrapper">
+                <table class="data-table" id="jn-trade-table">
+                  <thead>
+                    <tr>
+                      <th>狀態</th>
+                      <th>股票</th>
+                      <th>方向</th>
+                      <th>買入價</th>
+                      <th>賣出價</th>
+                      <th>數量</th>
+                      <th>損益</th>
+                      <th>報酬率</th>
+                      <th>備註</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jn-trade-tbody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================== SETTINGS PAGE ==================== -->
+        <section class="page" id="page-settings" data-page="settings">
+          <div class="page-inner fade-in">
+            <div class="settings-grid">
+              <!-- API Settings -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">🔗</span> API 設定</h3>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label class="form-label">後端 API 位址</label>
+                    <input type="text" class="form-input" id="set-api-url" value="http://localhost:8000">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">API 金鑰（選填）</label>
+                    <input type="password" class="form-input" id="set-api-key" placeholder="輸入 API 金鑰">
+                  </div>
+                  <button class="btn btn-primary" onclick="Settings.testConnection()">🔍 測試連線</button>
+                </div>
+              </div>
+
+              <!-- BB Parameters -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">📐</span> 布林通道參數</h3>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label class="form-label">移動平均週期</label>
+                    <input type="number" class="form-input" id="set-bb-period" value="20" min="5" max="100">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">標準差倍數</label>
+                    <input type="number" class="form-input" id="set-bb-std" value="2.0" min="0.5" max="4.0" step="0.1">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">MA 類型</label>
+                    <select class="form-input" id="set-ma-type">
+                      <option value="SMA" selected>簡單移動平均 (SMA)</option>
+                      <option value="EMA">指數移動平均 (EMA)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Notification Settings -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">🔔</span> 通知設定</h3>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label class="form-label">啟用桌面通知</label>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="set-desktop-notify" checked>
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">訊號音效提醒</label>
+                    <label class="toggle-switch">
+                      <input type="checkbox" id="set-sound-notify">
+                      <span class="toggle-slider"></span>
+                    </label>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">自動重新整理間隔（秒）</label>
+                    <input type="number" class="form-input" id="set-refresh-interval" value="30" min="5" max="300">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Display Settings -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">🎨</span> 顯示設定</h3>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label class="form-label">K線顏色慣例</label>
+                    <select class="form-input" id="set-candle-convention">
+                      <option value="TW" selected>台灣慣例（紅漲綠跌）</option>
+                      <option value="US">美國慣例（綠漲紅跌）</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">圖表預設週期</label>
+                    <select class="form-input" id="set-chart-period">
+                      <option value="30">1 個月</option>
+                      <option value="90" selected>3 個月</option>
+                      <option value="180">6 個月</option>
+                      <option value="365">1 年</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary btn-lg" onclick="Settings.save()">💾 儲存設定</button>
+              <button class="btn btn-ghost btn-lg" onclick="Settings.reset()">🔄 重置預設</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Overlay -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal-content">
+      <!-- Trade Add/Edit Modal -->
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">新增交易</h3>
+        <button class="modal-close" onclick="App.closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">股票代碼</label>
+            <input type="text" class="form-input" id="modal-stock-code" placeholder="例如：2330">
+          </div>
+          <div class="form-group">
+            <label class="form-label">股票名稱</label>
+            <input type="text" class="form-input" id="modal-stock-name" placeholder="自動填入" readonly>
+          </div>
+          <div class="form-group">
+            <label class="form-label">買入價格</label>
+            <input type="number" class="form-input" id="modal-buy-price" placeholder="買入價格" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">買入時間</label>
+            <input type="datetime-local" class="form-input" id="modal-buy-time">
+          </div>
+          <div class="form-group">
+            <label class="form-label">數量（股）</label>
+            <input type="number" class="form-input" id="modal-shares" placeholder="股數" min="1" value="1000">
+          </div>
+          <div class="form-group">
+            <label class="form-label">賣出價格（選填）</label>
+            <input type="number" class="form-input" id="modal-sell-price" placeholder="尚未賣出" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">賣出時間（選填）</label>
+            <input type="datetime-local" class="form-input" id="modal-sell-time">
+          </div>
+          <div class="form-group full-width">
+            <label class="form-label">備註</label>
+            <textarea class="form-input form-textarea" id="modal-notes" placeholder="交易備註..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="App.closeModal()">取消</button>
+        <button class="btn btn-primary" id="modal-save-btn" onclick="Journal.saveTrade()">💾 儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/app.js"></script>
+  <script src="js/chart.js"></script>
+  <script src="js/screener.js"></script>
+  <script src="js/backtest.js"></script>
+  <script src="js/journal.js"></script>
+
+  <script>
+    // Boot
+    document.addEventListener('DOMContentLoaded', () => {
+      App.init();
+    });
+  </script>
+</body>
+</html>
