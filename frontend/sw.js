@@ -1,14 +1,14 @@
-const CACHE_NAME = 'bollinger-signal-v1';
+const CACHE_NAME = 'bollinger-signal-v3';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/js/app.js',
-  '/js/chart.js',
-  '/js/screener.js',
-  '/js/backtest.js',
-  '/js/journal.js',
-  '/manifest.json'
+  './',
+  'index.html',
+  'css/style.css',
+  'js/app.js',
+  'js/chart.js',
+  'js/screener.js',
+  'js/backtest.js',
+  'js/journal.js',
+  'manifest.json'
 ];
 
 const CDN_ASSETS = [

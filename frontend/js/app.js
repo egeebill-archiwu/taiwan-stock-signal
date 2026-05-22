@@ -42,20 +42,47 @@ const App = (() => {
   };
 
   // ---- Init ----
-  function init() {
+  async function init() {
     loadSettings();
     setupRouter();
     setupSidebar();
     startClock();
     registerSW();
 
-    setTimeout(() => {
-      const ls = document.getElementById('loading-screen');
-      if (ls) ls.classList.add('hidden');
-    }, 800);
-
     handleRoute();
-    checkApiConnection();
+
+    // 更新載入畫面文字，提示使用者伺服器可能需要時間喚醒
+    const loadingText = document.querySelector('.loading-text');
+    if (loadingText) {
+      loadingText.innerHTML = '正在連線後端伺服器...<br><small style="font-size:0.75rem; color:rgba(255,255,255,0.5); display:block; margin-top:8px;">(免費雲端主機喚醒中，首次載入可能需要 30 秒，請稍候)</small>';
+    }
+
+    // 設定定時器：如果 8 秒內沒連上，先關閉載入畫面並提示使用者
+    let loadingScreenHidden = false;
+    const hideTimeout = setTimeout(() => {
+      if (!loadingScreenHidden) {
+        const ls = document.getElementById('loading-screen');
+        if (ls) ls.classList.add('hidden');
+        loadingScreenHidden = true;
+        toast('後端伺服器正在喚醒中，部分功能可能暫時無法使用，請稍候...', 'warning');
+      }
+    }, 8000);
+
+    try {
+      await checkApiConnection();
+      if (state.apiConnected) {
+        clearTimeout(hideTimeout);
+        if (!loadingScreenHidden) {
+          const ls = document.getElementById('loading-screen');
+          if (ls) ls.classList.add('hidden');
+          loadingScreenHidden = true;
+          toast('伺服器連線成功！', 'success');
+        }
+      }
+    } catch (e) {
+      console.warn('[Init] API Check Error:', e);
+    }
+
     console.log('[App] 台股布林訊號系統已啟動 v' + CONFIG.version);
   }
 
@@ -336,7 +363,12 @@ const App = (() => {
   // ---- Settings Page ----
   function initSettings() {
     const s = state.settings;
-    setVal('set-api-url', s.apiUrl || CONFIG.apiBase);
+    // 如果沒有儲存的 API 網址，則根據當前網域自動推導預設值
+    const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:8000'
+      : window.location.origin;
+
+    setVal('set-api-url', s.apiUrl !== undefined ? s.apiUrl : defaultApiUrl);
     setVal('set-bb-period', s.bbPeriod || 20);
     setVal('set-bb-std', s.bbStd || 2.0);
     setVal('set-refresh-interval', s.refreshInterval || 30);
@@ -352,12 +384,26 @@ const App = (() => {
       const raw = localStorage.getItem('bb-signal-settings');
       if (raw) {
         state.settings = JSON.parse(raw);
-        // 只有用戶明確設定到其他伺服器時才覆寫 apiBase
-        if (state.settings.apiUrl && state.settings.apiUrl !== 'http://localhost:8000' && state.settings.apiUrl !== '') {
-          CONFIG.apiBase = state.settings.apiUrl;
-        }
       }
     } catch (e) {}
+
+    // 動態判斷 API Base URL，避免手機或雲端連線到錯誤的 localhost
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+
+    if (state.settings.apiUrl) {
+      const url = state.settings.apiUrl;
+      const isUrlLocal = url.includes('localhost') || url.includes('127.0.0.1');
+
+      if (!isLocalhost && isUrlLocal) {
+        // 如果是在行動裝置或雲端存取，但設定值是 localhost，則忽略設定改用相對路徑
+        CONFIG.apiBase = '';
+      } else {
+        CONFIG.apiBase = url;
+      }
+    } else {
+      CONFIG.apiBase = '';
+    }
   }
 
   return {
@@ -380,8 +426,9 @@ const Settings = (() => {
   }
 
   function save() {
+    const apiUrlInput = document.getElementById('set-api-url').value.trim();
     const settings = {
-      apiUrl: document.getElementById('set-api-url').value,
+      apiUrl: apiUrlInput,
       bbPeriod: parseInt(document.getElementById('set-bb-period').value),
       bbStd: parseFloat(document.getElementById('set-bb-std').value),
       maType: document.getElementById('set-ma-type').value,
@@ -392,7 +439,18 @@ const Settings = (() => {
       chartPeriod: parseInt(document.getElementById('set-chart-period').value)
     };
     App.state.settings = settings;
-    App.CONFIG.apiBase = settings.apiUrl;
+
+    // 動態設定 CONFIG.apiBase，防止在非本機環境下存取 localhost
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+    const isUrlLocal = settings.apiUrl.includes('localhost') || settings.apiUrl.includes('127.0.0.1');
+
+    if (!isLocalhost && isUrlLocal) {
+      App.CONFIG.apiBase = '';
+    } else {
+      App.CONFIG.apiBase = settings.apiUrl;
+    }
+
     localStorage.setItem('bb-signal-settings', JSON.stringify(settings));
     localStorage.setItem('bb-api-url', settings.apiUrl);
     App.toast('設定已儲存', 'success');
@@ -402,7 +460,12 @@ const Settings = (() => {
     localStorage.removeItem('bb-signal-settings');
     localStorage.removeItem('bb-api-url');
     App.state.settings = {};
-    setVal('set-api-url', 'http://localhost:8000');
+    
+    const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:8000'
+      : window.location.origin;
+
+    setVal('set-api-url', defaultApiUrl);
     setVal('set-api-key', '');
     setVal('set-bb-period', 20);
     setVal('set-bb-std', 2.0);
@@ -412,6 +475,8 @@ const Settings = (() => {
     setVal('set-refresh-interval', 30);
     document.getElementById('set-candle-convention').value = 'TW';
     document.getElementById('set-chart-period').value = 90;
+    
+    App.CONFIG.apiBase = ''; // 重置為預設相對路徑
     App.toast('設定已重置', 'info');
   }
 
