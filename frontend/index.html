@@ -32,7 +32,7 @@
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <div class="logo">
+        <div class="logo" id="sidebar-logo" title="點擊或長按查看選股策略說明">
           <span class="logo-icon">📊</span>
           <span class="logo-text">布林訊號</span>
         </div>
@@ -254,8 +254,9 @@
                 <h3 class="card-title">
                   <span class="title-icon">🔍</span> 篩選結果
                   <span class="badge badge-cyan" id="screener-count">0</span>
+                  <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 10px; font-weight: normal;" id="screener-last-updated">最後更新：尚未更新</span>
                 </h3>
-                <button class="btn btn-sm btn-primary" onclick="Screener.refresh()">
+                <button class="btn btn-sm btn-primary" id="screener-refresh-btn" onclick="Screener.refresh()">
                   🔄 重新篩選
                 </button>
               </div>
@@ -324,7 +325,7 @@
             <div class="card" id="analysis-chart-card" style="display:none;">
               <div class="card-header">
                 <h3 class="card-title">
-                  <span class="title-icon">📈</span> K線圖 + 布林通道
+                  <span class="title-icon">📈</span> K線圖 + 技術指標
                 </h3>
                 <div class="chart-controls">
                   <div class="btn-group" id="analysis-period-btns">
@@ -336,7 +337,22 @@
                 </div>
               </div>
               <div class="card-body">
-                <div class="chart-container" id="analysis-chart-container"></div>
+                <!-- 主 K 線圖 -->
+                <div class="chart-container" id="analysis-chart-container" style="height: 320px;"></div>
+                
+                <!-- 指標切換按鈕 -->
+                <div class="indicator-toggles" id="analysis-indicator-toggles" style="margin-top: 15px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                  <button class="btn btn-sm btn-filter active" data-indicator="volume">📊 成交量</button>
+                  <button class="btn btn-sm btn-filter" data-indicator="kd">📈 KD 指標</button>
+                  <button class="btn btn-sm btn-filter" data-indicator="macd">📊 MACD</button>
+                  <button class="btn btn-sm btn-filter" data-indicator="rsi">📈 RSI</button>
+                  <button class="btn btn-sm btn-filter" data-indicator="foreign">外資買賣</button>
+                  <button class="btn btn-sm btn-filter" data-indicator="trust">投信買賣</button>
+                  <button class="btn btn-sm btn-filter" data-indicator="major_retail">大戶 vs 散戶</button>
+                </div>
+                
+                <!-- 副指標圖表 -->
+                <div class="chart-container" id="analysis-subchart-container" style="height: 150px;"></div>
               </div>
             </div>
 
@@ -370,6 +386,21 @@
                       <!-- Populated by JS -->
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Analysis Card -->
+            <div class="card" id="analysis-ai-card" style="display:none; margin-top: 20px;">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <h3 class="card-title" style="margin: 0;"><span class="title-icon">🤖</span> AI 智能診斷與投資建議</h3>
+                <button class="btn btn-primary" id="analysis-ai-btn" onclick="Analysis.runAiAnalysis()">✨ 執行 AI 分析</button>
+              </div>
+              <div class="card-body">
+                <div id="analysis-ai-result" class="ai-result-panel" style="padding: 15px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); min-height: 80px;">
+                  <div class="ai-placeholder" style="color: var(--text-muted); text-align: center; padding: 20px 0;">
+                    <p style="margin: 0; font-size: 0.95rem;">點擊右上角「執行 AI 分析」按鈕，AI 將綜合分析布林通道、各項指標與籌碼動向並給出交易建議。</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -592,6 +623,14 @@
                     <label class="form-label">API 金鑰（選填）</label>
                     <input type="password" class="form-input" id="set-api-key" placeholder="輸入 API 金鑰">
                   </div>
+                  <div class="form-group">
+                    <label class="form-label">FinMind Token（籌碼資料，選填）</label>
+                    <input type="password" class="form-input" id="set-finmind-token" placeholder="輸入 FinMind Token">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Gemini API 金鑰（AI 智能分析，選填）</label>
+                    <input type="password" class="form-input" id="set-gemini-key" placeholder="輸入 Gemini API 金鑰">
+                  </div>
                   <button class="btn btn-primary" onclick="Settings.testConnection()">🔍 測試連線</button>
                 </div>
               </div>
@@ -730,6 +769,73 @@
       <div class="modal-footer">
         <button class="btn btn-ghost" onclick="App.closeModal()">取消</button>
         <button class="btn btn-primary" id="modal-save-btn" onclick="Journal.saveTrade()">💾 儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Strategy Explanation Modal -->
+  <div class="modal-overlay" id="strategy-modal-overlay">
+    <div class="modal" id="strategy-modal-content" style="max-width: 720px;">
+      <div class="modal-header">
+        <h3 class="modal-title">📊 布林通道選股策略說明</h3>
+        <button class="modal-close" id="strategy-modal-close">&times;</button>
+      </div>
+      <div class="modal-body" style="line-height: 1.6; color: var(--text-secondary); max-height: 70vh; overflow-y: auto;">
+        <p style="margin-bottom: 1.25rem; font-size: 0.95rem; color: var(--text-primary);">
+          本系統的核心邏輯基於<strong>布林通道 (Bollinger Bands)</strong> 指標，配合股價趨勢及短期 K 線排列特徵，於市場發生動能竭盡與趨勢反轉的臨界點，篩選出具備高勝率的買賣訊號。
+        </p>
+        
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+          <!-- 趨勢 -->
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--bg-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+            <h4 style="color: var(--cyan); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+              <span>📈</span> 1. 趨勢判定邏輯 (Trend)
+            </h4>
+            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">系統以 <strong>20 日移動平均線 (MA20，即布林中軌)</strong> 為核心判定中長線趨勢：</p>
+            <ul style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: disc;">
+              <li><strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>：MA20 斜率在過去 5 天內持續上揚，且收盤價高於 MA20。</li>
+              <li><strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>：MA20 斜率在過去 5 天內持續下跌，且收盤價低於 MA20。</li>
+              <li><strong style="color: var(--text-secondary);">盤整趨勢 (SIDEWAYS)</strong>：MA20 走平或不符合上述上揚/下跌條件。</li>
+            </ul>
+          </div>
+
+          <!-- 買入 -->
+          <div style="background: rgba(0, 230, 118, 0.02); border: 1px solid rgba(0, 230, 118, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+            <h4 style="color: var(--green); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+              <span>🟢</span> 2. 買入訊號觸發條件 (BUY)
+            </h4>
+            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當市場出現超賣反彈機會時，系統將偵測買入時機：</p>
+            <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
+              <li><strong>趨勢前提</strong>：當前必須判定為 <strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>。</li>
+              <li><strong>股價位置</strong>：當日收盤價已接近或跌破 <strong>布林下軌 (BBL)</strong>（距離下軌 3% 以內）。</li>
+              <li><strong>K線組合</strong>：在此位置之前，必須有連續至少 <strong>3 根綠色 K 棒（陰線，收盤價 &lt; 開盤價）</strong>。</li>
+              <li><strong>訊號觸發</strong>：在連續綠 K 後，當天首度收出 <strong>紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
+            </ol>
+            <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+              ※ 邏輯：股價於下降通道邊界發生連跌，隨後收紅棒代表短線賣壓竭盡、買方介入，屬於低檔反轉買點。
+            </div>
+          </div>
+
+          <!-- 賣出 -->
+          <div style="background: rgba(255, 82, 82, 0.02); border: 1px solid rgba(255, 82, 82, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+            <h4 style="color: var(--red); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+              <span>🔴</span> 3. 賣出訊號觸發條件 (SELL)
+            </h4>
+            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當多頭力道竭盡、股價面臨拉回風險時，系統將偵測賣出時機：</p>
+            <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
+              <li><strong>趨勢前提</strong>：當前必須判定為 <strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>。</li>
+              <li><strong>股價位置</strong>：當日收盤價已接近或突破 <strong>布林上軌 (BBU)</strong>（距離上軌 3% 以內）。</li>
+              <li><strong>K線組合</strong>：在此位置之前，必須有連續至少 <strong>3 根紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
+              <li><strong>訊號觸發</strong>：在連續紅 K 後，當天首度收出 <strong>綠色 K 棒（陰線，收盤價 &lt; 開盤價）</strong> 且當日收盤價 <strong>低於 10 日移動平均線 (MA10)</strong>。</li>
+            </ol>
+            <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+              ※ 邏輯：股價於高檔強勢連漲突破軌道，隨後出現陰線反轉且跌破短天期支撐線（MA10），代表買盤潰散，屬於高檔多頭竭盡賣點。
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="strategy-modal-ok-btn">我知道了</button>
       </div>
     </div>
   </div>

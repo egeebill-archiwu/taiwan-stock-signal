@@ -165,6 +165,19 @@ body {
   gap: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.logo:hover {
+  transform: scale(1.02);
+  filter: brightness(1.2);
+}
+
+.logo:active {
+  transform: scale(0.98);
 }
 
 .logo-icon {

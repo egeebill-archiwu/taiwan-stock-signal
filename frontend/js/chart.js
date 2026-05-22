@@ -5,8 +5,10 @@
 
 const StockChart = (() => {
   let activeChart = null;
+  let activeSubChart = null;
   let activeCandleSeries = null;
   let resizeObserver = null;
+  let subResizeObserver = null;
 
   // ---- Color Config (Taiwan Convention) ----
   const COLORS = {
@@ -121,7 +123,7 @@ const StockChart = (() => {
 
     candleSeries.setData(data);
 
-    // Volume histogram
+    // Volume histogram (Overlaid on main chart as background)
     const volumeSeries = chart.addHistogramSeries({
       color: COLORS.volume,
       priceFormat: { type: 'volume' },
@@ -157,6 +159,202 @@ const StockChart = (() => {
     activeCandleSeries = candleSeries;
 
     return { chart, candleSeries, volumeSeries };
+  }
+
+  // ---- Render Sub Chart for Indicators ----
+  function renderSubChart(containerId, rawData, indicator, mainChartObj) {
+    const container = document.getElementById(containerId);
+    if (!container) return null;
+    container.innerHTML = '';
+
+    if (activeSubChart) {
+      activeSubChart.remove();
+      activeSubChart = null;
+    }
+    if (subResizeObserver) {
+      subResizeObserver.disconnect();
+      subResizeObserver = null;
+    }
+
+    if (!rawData || rawData.length === 0) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">無副圖表資料</div>';
+      return null;
+    }
+
+    // Filter and map data
+    const items = rawData.filter(r => r.date).map(r => ({
+      time: r.date.substring(0, 10),
+      open: r.open,
+      high: r.high,
+      low: r.low,
+      close: r.close,
+      volume: r.volume || 0,
+      K: r.K,
+      D: r.D,
+      macd_dif: r.macd_dif,
+      macd_dea: r.macd_dea,
+      macd_hist: r.macd_hist,
+      RSI: r.RSI,
+      foreign_net: r.foreign_net,
+      trust_net: r.trust_net,
+      dealer_net: r.dealer_net,
+      major_net: r.major_net,
+      retail_net: r.retail_net
+    }));
+
+    const subChart = LightweightCharts.createChart(container, {
+      width: container.clientWidth,
+      height: container.clientHeight || 150,
+      layout: {
+        background: { type: 'solid', color: COLORS.background },
+        textColor: COLORS.text,
+        fontFamily: "'Inter', sans-serif",
+        fontSize: 11
+      },
+      grid: {
+        vertLines: { color: COLORS.grid },
+        horzLines: { color: COLORS.grid }
+      },
+      crosshair: {
+        mode: LightweightCharts.CrosshairMode.Normal,
+        vertLine: { color: COLORS.crosshair, width: 1, style: 2, labelBackgroundColor: '#1a1f42' },
+        horzLine: { color: COLORS.crosshair, width: 1, style: 2, labelBackgroundColor: '#1a1f42' }
+      },
+      rightPriceScale: {
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        scaleMargins: { top: 0.15, bottom: 0.15 }
+      },
+      timeScale: {
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        timeVisible: false,
+        dayVisible: true
+      },
+      handleScroll: { vertTouchDrag: false },
+      handleScale: { axisPressedMouseMove: true }
+    });
+
+    activeSubChart = subChart;
+
+    // Draw series based on indicator type
+    if (indicator === 'volume') {
+      const volumeSeries = subChart.addHistogramSeries({
+        color: COLORS.volume,
+        priceFormat: { type: 'volume' },
+      });
+      const volData = items.map(d => ({
+        time: d.time,
+        value: d.volume,
+        color: d.close >= d.open ? 'rgba(255, 82, 82, 0.5)' : 'rgba(0, 230, 118, 0.5)'
+      }));
+      volumeSeries.setData(volData);
+
+    } else if (indicator === 'kd') {
+      const kSeries = subChart.addLineSeries({ color: '#00d4ff', lineWidth: 1.5, priceLineVisible: false });
+      kSeries.setData(items.filter(d => d.K !== null).map(d => ({ time: d.time, value: d.K })));
+
+      const dSeries = subChart.addLineSeries({ color: '#ffd700', lineWidth: 1.5, priceLineVisible: false });
+      dSeries.setData(items.filter(d => d.D !== null).map(d => ({ time: d.time, value: d.D })));
+
+      kSeries.createPriceLine({
+        price: 80, color: 'rgba(255, 82, 82, 0.3)', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '超買'
+      });
+      kSeries.createPriceLine({
+        price: 20, color: 'rgba(0, 230, 118, 0.3)', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '超賣'
+      });
+
+    } else if (indicator === 'macd') {
+      const difSeries = subChart.addLineSeries({ color: '#00d4ff', lineWidth: 1.5, priceLineVisible: false });
+      difSeries.setData(items.filter(d => d.macd_dif !== null).map(d => ({ time: d.time, value: d.macd_dif })));
+
+      const deaSeries = subChart.addLineSeries({ color: '#ffd700', lineWidth: 1.5, priceLineVisible: false });
+      deaSeries.setData(items.filter(d => d.macd_dea !== null).map(d => ({ time: d.time, value: d.macd_dea })));
+
+      const histSeries = subChart.addHistogramSeries({
+        priceFormat: { type: 'custom', formatter: v => v.toFixed(2) }
+      });
+      histSeries.setData(items.filter(d => d.macd_hist !== null).map(d => ({
+        time: d.time,
+        value: d.macd_hist,
+        color: d.macd_hist >= 0 ? 'rgba(255, 82, 82, 0.6)' : 'rgba(0, 230, 118, 0.6)'
+      })));
+
+    } else if (indicator === 'rsi') {
+      const rsiSeries = subChart.addLineSeries({ color: '#b388ff', lineWidth: 1.5, priceLineVisible: false });
+      rsiSeries.setData(items.filter(d => d.RSI !== null).map(d => ({ time: d.time, value: d.RSI })));
+
+      rsiSeries.createPriceLine({
+        price: 70, color: 'rgba(255, 82, 82, 0.3)', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '超買'
+      });
+      rsiSeries.createPriceLine({
+        price: 30, color: 'rgba(0, 230, 118, 0.3)', lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '超賣'
+      });
+
+    } else if (indicator === 'foreign') {
+      const fSeries = subChart.addHistogramSeries({
+        priceFormat: { type: 'custom', formatter: v => Math.round(v) + ' 張' }
+      });
+      fSeries.setData(items.filter(d => d.foreign_net !== null).map(d => ({
+        time: d.time,
+        value: d.foreign_net,
+        color: d.foreign_net >= 0 ? 'rgba(255, 82, 82, 0.6)' : 'rgba(0, 230, 118, 0.6)'
+      })));
+
+    } else if (indicator === 'trust') {
+      const tSeries = subChart.addHistogramSeries({
+        priceFormat: { type: 'custom', formatter: v => Math.round(v) + ' 張' }
+      });
+      tSeries.setData(items.filter(d => d.trust_net !== null).map(d => ({
+        time: d.time,
+        value: d.trust_net,
+        color: d.trust_net >= 0 ? 'rgba(255, 82, 82, 0.6)' : 'rgba(0, 230, 118, 0.6)'
+      })));
+
+    } else if (indicator === 'major_retail') {
+      const majSeries = subChart.addLineSeries({ color: '#ff5252', lineWidth: 1.5, priceLineVisible: false });
+      majSeries.setData(items.filter(d => d.major_net !== null).map(d => ({ time: d.time, value: d.major_net })));
+
+      const retSeries = subChart.addLineSeries({ color: '#00d4ff', lineWidth: 1.5, priceLineVisible: false });
+      retSeries.setData(items.filter(d => d.retail_net !== null).map(d => ({ time: d.time, value: d.retail_net })));
+    }
+
+    // Sync scroll/zoom with main chart
+    if (mainChartObj && mainChartObj.chart) {
+      const mainChart = mainChartObj.chart;
+      
+      mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (range) {
+          subChart.timeScale().setVisibleLogicalRange(range);
+        }
+      });
+      
+      subChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (range) {
+          mainChart.timeScale().setVisibleLogicalRange(range);
+        }
+      });
+      
+      // Sync initial zoom level
+      setTimeout(() => {
+        const mainRange = mainChart.timeScale().getVisibleLogicalRange();
+        if (mainRange) {
+          subChart.timeScale().setVisibleLogicalRange(mainRange);
+        }
+      }, 50);
+    }
+
+    subResizeObserver = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        subChart.applyOptions({ width, height });
+      }
+    });
+    subResizeObserver.observe(container);
+
+    return subChart;
   }
 
   // ---- Add Bollinger Bands (從後端已計算資料，最準確) ----
@@ -285,14 +483,23 @@ const StockChart = (() => {
       activeChart = null;
       activeCandleSeries = null;
     }
+    if (activeSubChart) {
+      activeSubChart.remove();
+      activeSubChart = null;
+    }
     if (resizeObserver) {
       resizeObserver.disconnect();
       resizeObserver = null;
+    }
+    if (subResizeObserver) {
+      subResizeObserver.disconnect();
+      subResizeObserver = null;
     }
   }
 
   return {
     createStockChart,
+    renderSubChart,
     addBollingerBands,
     addBollingerBandsFromData,
     addMA,

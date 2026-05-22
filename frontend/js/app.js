@@ -46,6 +46,7 @@ const App = (() => {
     loadSettings();
     setupRouter();
     setupSidebar();
+    setupStrategyModalEvents();
     startClock();
     registerSW();
 
@@ -235,6 +236,56 @@ const App = (() => {
   function openModal() { document.getElementById('modal-overlay').classList.add('open'); }
   function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
+  function openStrategyModal() { document.getElementById('strategy-modal-overlay').classList.add('open'); }
+  function closeStrategyModal() { document.getElementById('strategy-modal-overlay').classList.remove('open'); }
+
+  function setupStrategyModalEvents() {
+    const logo = document.getElementById('sidebar-logo');
+    const modal = document.getElementById('strategy-modal-overlay');
+    const closeBtn = document.getElementById('strategy-modal-close');
+    const okBtn = document.getElementById('strategy-modal-ok-btn');
+
+    if (!logo || !modal) return;
+
+    logo.addEventListener('click', openStrategyModal);
+
+    let pressTimer;
+    const startPress = () => {
+      pressTimer = setTimeout(() => {
+        openStrategyModal();
+        toast('策略說明已載入 (長按偵測)', 'info');
+      }, 600);
+    };
+    const cancelPress = () => {
+      clearTimeout(pressTimer);
+    };
+
+    logo.addEventListener('mousedown', startPress);
+    logo.addEventListener('mouseup', cancelPress);
+    logo.addEventListener('mouseleave', cancelPress);
+
+    logo.addEventListener('touchstart', startPress, { passive: true });
+    logo.addEventListener('touchend', cancelPress, { passive: true });
+    logo.addEventListener('touchcancel', cancelPress, { passive: true });
+
+    const closeActions = [closeBtn, okBtn];
+    closeActions.forEach(btn => {
+      if (btn) btn.addEventListener('click', closeStrategyModal);
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeStrategyModal();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('open')) {
+        closeStrategyModal();
+      }
+    });
+  }
+
   // ---- Dashboard ----
   async function initDashboard() {
     renderTrendChart();
@@ -363,7 +414,7 @@ const App = (() => {
   // ---- Settings Page ----
   function initSettings() {
     const s = state.settings;
-    // 如果沒有儲存的 API 網址，則根據當前網域自動推導預設值
+    // 如果沒有儲存發 API 網址，則根據當前網域自動推導預設值
     const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? 'http://localhost:8000'
       : window.location.origin;
@@ -372,6 +423,8 @@ const App = (() => {
     setVal('set-bb-period', s.bbPeriod || 20);
     setVal('set-bb-std', s.bbStd || 2.0);
     setVal('set-refresh-interval', s.refreshInterval || 30);
+    setVal('set-finmind-token', s.finmindToken || '');
+    setVal('set-gemini-key', s.geminiKey || '');
   }
 
   function setVal(id, val) {
@@ -436,7 +489,9 @@ const Settings = (() => {
       soundNotify: document.getElementById('set-sound-notify').checked,
       refreshInterval: parseInt(document.getElementById('set-refresh-interval').value),
       candleConvention: document.getElementById('set-candle-convention').value,
-      chartPeriod: parseInt(document.getElementById('set-chart-period').value)
+      chartPeriod: parseInt(document.getElementById('set-chart-period').value),
+      finmindToken: document.getElementById('set-finmind-token').value.trim(),
+      geminiKey: document.getElementById('set-gemini-key').value.trim()
     };
     App.state.settings = settings;
 
@@ -467,6 +522,8 @@ const Settings = (() => {
 
     setVal('set-api-url', defaultApiUrl);
     setVal('set-api-key', '');
+    setVal('set-finmind-token', '');
+    setVal('set-gemini-key', '');
     setVal('set-bb-period', 20);
     setVal('set-bb-std', 2.0);
     document.getElementById('set-ma-type').value = 'SMA';
@@ -496,6 +553,8 @@ const Analysis = (() => {
   let currentStock = null;
   let chartInstance = null;
   let currentPeriod = '6mo';
+  let currentStockData = null;
+  let activeIndicator = 'volume';
 
   const periodMap = {
     '30': '1mo', '90': '3mo', '180': '6mo', '365': '1y', '730': '2y'
@@ -523,7 +582,15 @@ const Analysis = (() => {
     document.getElementById('analysis-stock-header').style.display = 'flex';
     document.getElementById('analysis-chart-card').style.display = 'block';
     document.getElementById('analysis-details').style.display = 'grid';
+    document.getElementById('analysis-ai-card').style.display = 'block';
     document.getElementById('analysis-price').textContent = '載入中...';
+    
+    // Reset AI panel state
+    document.getElementById('analysis-ai-result').innerHTML = `
+      <div class="ai-placeholder" style="color: var(--text-muted); text-align: center; padding: 20px 0;">
+        <p style="margin: 0; font-size: 0.95rem;">點擊右上角「執行 AI 分析」按鈕，AI 將綜合分析布林通道、各項指標與籌碼動向並給出交易建議。</p>
+      </div>
+    `;
 
     await Promise.all([
       fetchAndRenderChart(cleanCode),
@@ -536,7 +603,8 @@ const Analysis = (() => {
     const container = document.getElementById('analysis-chart-container');
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">資料載入中...</div>';
 
-    const data = await App.apiFetch(`/api/stock/${code}/data?period=${currentPeriod}`);
+    const token = App.state.settings.finmindToken || '';
+    const data = await App.apiFetch(`/api/stock/${code}/data?period=${currentPeriod}&token=${token}`);
 
     if (!data || !data.data || data.data.length === 0) {
       container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--red)">⚠️ 無法取得股價資料，請確認股票代碼是否正確</div>';
@@ -545,6 +613,8 @@ const Analysis = (() => {
     }
 
     const rows = data.data;
+    currentStockData = rows; // 緩存個股數據
+    
     const lastRow = rows[rows.length - 1];
     const prevRow = rows.length > 1 ? rows[rows.length - 2] : lastRow;
 
@@ -599,6 +669,9 @@ const Analysis = (() => {
       if (maData.length > 0) {
         StockChart.addMAFromData(chartInstance, maData, '#b388ff');
       }
+
+      // 繪製副圖表
+      StockChart.renderSubChart('analysis-subchart-container', currentStockData, activeIndicator, chartInstance);
     }
 
     // ── 更新布林指標數值 ──
@@ -728,15 +801,138 @@ const Analysis = (() => {
     }).join('');
   }
 
-  // ── 切換時間區間 ──────────────────────────────────────
+  // ── 執行 AI 智能分析與策略建議 ────────────────────────────
+  async function runAiAnalysis() {
+    if (!currentStock) {
+      App.toast('請先選擇並載入一檔股票', 'warning');
+      return;
+    }
+
+    const aiBtn = document.getElementById('analysis-ai-btn');
+    const resultPanel = document.getElementById('analysis-ai-result');
+
+    // 檢查是否有配置金鑰
+    const geminiKey = App.state.settings.geminiKey || '';
+    if (!geminiKey) {
+      App.toast('請先前往「設定」配置 Gemini API 金鑰', 'warning');
+      App.navigateTo('settings');
+      return;
+    }
+
+    // 更新 UI 狀態為載入中
+    aiBtn.disabled = true;
+    aiBtn.innerHTML = `<span>⏳</span> AI 分析中...`;
+    resultPanel.innerHTML = `
+      <div style="text-align:center; padding:25px 0;">
+        <div class="loading-spinner" style="margin:0 auto 12px; width:36px; height:36px;"></div>
+        <div style="color:var(--cyan); font-size:0.95rem;">正在彙整技術與籌碼指標，傳送給 Gemini AI 進行診斷...</div>
+        <div style="color:var(--text-muted); font-size:0.8rem; margin-top:8px;">(大約需要 3-8 秒，請稍候)</div>
+      </div>
+    `;
+
+    try {
+      const finmindToken = App.state.settings.finmindToken || null;
+      const res = await App.apiFetch(`/api/stock/${currentStock.code}/ai-analysis`, {
+        method: 'POST',
+        body: JSON.stringify({
+          gemini_key: geminiKey,
+          period: currentPeriod,
+          finmind_token: finmindToken
+        })
+      });
+
+      if (!res) {
+        throw new Error('API 無回應，請確認後端服務已啟動。');
+      }
+
+      // 渲染分析結果
+      const signal = res.signal || 'HOLD';
+      let signalClass = 'badge-hold';
+      let signalText = '中性觀望';
+      
+      if (signal === 'BUY') {
+        signalClass = 'badge-buy';
+        signalText = '強力買進';
+      } else if (signal === 'SELL') {
+        signalClass = 'badge-sell';
+        signalText = '強力賣出';
+      }
+
+      resultPanel.innerHTML = `
+        <div class="ai-analysis-output" style="display:flex; flex-direction:column; gap:16px; animation: fadeIn 0.5s ease-out;">
+          <div style="display:flex; align-items:center; gap:12px; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:12px;">
+            <div style="font-size:1.05rem; font-weight:600; color:var(--text-primary)">診斷結論：</div>
+            <span class="badge ${signalClass}" style="font-size:0.95rem; padding:5px 14px; border-radius:30px;">${signalText}</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <h4 style="margin:0 0 6px 0; color:var(--cyan); font-size:0.95rem; display:flex; align-items:center; gap:6px; font-weight:600;">
+                <span>🎯</span> 診斷原因與多因子評估
+              </h4>
+              <p style="margin:0; color:var(--text-secondary); font-size:0.9rem; line-height:1.6; text-align:justify;">${res.reason || '--'}</p>
+            </div>
+            <div>
+              <h4 style="margin:0 0 6px 0; color:var(--gold); font-size:0.95rem; display:flex; align-items:center; gap:6px; font-weight:600;">
+                <span>📐</span> 操作策略與量化交易指南
+              </h4>
+              <p style="margin:0; color:var(--text-secondary); font-size:0.9rem; line-height:1.6; text-align:justify;">${res.strategy || '--'}</p>
+            </div>
+            <div>
+              <h4 style="margin:0 0 6px 0; color:var(--red); font-size:0.95rem; display:flex; align-items:center; gap:6px; font-weight:600;">
+                <span>⚠️</span> 交易風險警示
+              </h4>
+              <p style="margin:0; color:var(--text-secondary); font-size:0.9rem; line-height:1.6; text-align:justify;">${res.risks || '--'}</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      App.toast('AI 智能診斷分析完成！', 'success');
+
+    } catch (err) {
+      console.error('[AI Analysis Error]', err);
+      resultPanel.innerHTML = `
+        <div style="padding:20px; border-radius:8px; border:1px solid rgba(255,82,82,0.2); background:rgba(255,82,82,0.05); color:var(--red);">
+          <h4 style="margin:0 0 8px 0; font-size:0.95rem; font-weight:600;">⚠️ AI 分析執行失敗</h4>
+          <p style="margin:0; font-size:0.88rem; line-height:1.5; color:var(--text-secondary);">
+            ${err.message || '連線至後端或 Gemini API 逾時，請確認設定中的 Gemini API 金鑰是否有效。'}
+          </p>
+          <button class="btn btn-sm btn-ghost" style="margin-top:12px; color:var(--cyan); border-color:var(--cyan-glow);" onclick="App.navigateTo('settings')">
+            前往設定設定金鑰
+          </button>
+        </div>
+      `;
+      App.toast('AI 診斷執行失敗，請檢查金鑰設定', 'error');
+    } finally {
+      aiBtn.disabled = false;
+      aiBtn.innerHTML = `✨ 執行 AI 分析`;
+    }
+  }
+
+  // ── 切換時間區間 與 切換技術指標 ──────────────────────────────────────
   document.addEventListener('click', (e) => {
-    const btn = e.target.closest('#analysis-period-btns .btn-filter');
-    if (!btn) return;
-    document.querySelectorAll('#analysis-period-btns .btn-filter').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentPeriod = periodMap[btn.dataset.period] || '6mo';
-    if (currentStock) loadStock(currentStock.code);
+    // 1. 切換時間區間
+    const periodBtn = e.target.closest('#analysis-period-btns .btn-filter');
+    if (periodBtn) {
+      document.querySelectorAll('#analysis-period-btns .btn-filter').forEach(b => b.classList.remove('active'));
+      periodBtn.classList.add('active');
+      currentPeriod = periodMap[periodBtn.dataset.period] || '6mo';
+      if (currentStock) loadStock(currentStock.code);
+      return;
+    }
+
+    // 2. 切換技術指標
+    const indicatorBtn = e.target.closest('#analysis-indicator-toggles .btn-filter');
+    if (indicatorBtn) {
+      document.querySelectorAll('#analysis-indicator-toggles .btn-filter').forEach(b => b.classList.remove('active'));
+      indicatorBtn.classList.add('active');
+      activeIndicator = indicatorBtn.dataset.indicator || 'volume';
+      if (currentStockData) {
+        StockChart.renderSubChart('analysis-subchart-container', currentStockData, activeIndicator, chartInstance);
+      }
+      return;
+    }
   });
 
-  return { searchStock, loadStock };
+  return { searchStock, loadStock, runAiAnalysis };
 })();

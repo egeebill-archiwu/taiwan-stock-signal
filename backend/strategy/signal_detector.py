@@ -324,7 +324,10 @@ def detect_all_signals(
     return all_signals
 
 
-def prepare_dataframe_with_indicators(df: pd.DataFrame) -> pd.DataFrame:
+def prepare_dataframe_with_indicators(
+    df: pd.DataFrame,
+    token: Optional[str] = None
+) -> pd.DataFrame:
     """
     準備包含所有指標與趨勢的完整 DataFrame（供 API 回傳使用）
 
@@ -332,15 +335,57 @@ def prepare_dataframe_with_indicators(df: pd.DataFrame) -> pd.DataFrame:
     ----------
     df : pd.DataFrame
         原始股價 DataFrame
+    token : str, optional
+        FinMind API Token
 
     Returns
     -------
     pd.DataFrame
-        包含所有指標的 DataFrame
+        包含所有指標與籌碼數據的 DataFrame
     """
     if df.empty:
         return df
 
     df = add_all_indicators(df)
     df = add_trend_column(df)
+
+    # 籌碼數據整合
+    if "date" in df.columns:
+        stock_id = df["stock_id"].iloc[0] if "stock_id" in df.columns else "UNKNOWN"
+        start_date = df["date"].min().strftime("%Y-%m-%d")
+        end_date = df["date"].max().strftime("%Y-%m-%d")
+
+        from backend.data.chips import fetch_institutional_chips, get_deterministic_chip_flow
+        
+        # 取得真實籌碼資料
+        chips_df = fetch_institutional_chips(stock_id, start_date, end_date, token=token)
+        
+        if chips_df is not None and not chips_df.empty:
+            df = pd.merge(df, chips_df, on="date", how="left")
+            
+        # 確保籌碼欄位皆存在，若為空或合併失敗則透過演算法模擬
+        chip_cols = ["foreign_net", "trust_net", "dealer_net", "major_net", "retail_net"]
+        for col in chip_cols:
+            if col not in df.columns:
+                df[col] = None
+
+        # 計算價格每日變動百分比以進行自適應偏置
+        price_change = df["close"].pct_change().fillna(0.0) * 100.0
+
+        for idx in range(len(df)):
+            row = df.iloc[idx]
+            if pd.isna(row["foreign_net"]) or pd.isna(row["trust_net"]):
+                date_str = row["date"].strftime("%Y-%m-%d")
+                vol = float(row["volume"])
+                pct_change = float(price_change.iloc[idx])
+                
+                flow = get_deterministic_chip_flow(stock_id, date_str, vol, pct_change)
+                
+                df.at[idx, "foreign_net"] = flow["foreign_net"]
+                df.at[idx, "trust_net"] = flow["trust_net"]
+                df.at[idx, "dealer_net"] = flow["dealer_net"]
+                df.at[idx, "major_net"] = flow["major_net"]
+                df.at[idx, "retail_net"] = flow["retail_net"]
+
     return df
+

@@ -1,46 +1,32 @@
 /* ============================================
    screener.js - Signal Screener Page
+   台股布林訊號系統 - 實時 API 串接與更新
    ============================================ */
 
 const Screener = (() => {
   let initialized = false;
   let autoRefreshTimer = null;
   let currentFilters = { signal: 'ALL', trend: 'ALL' };
+  let screenerData = [];
+  let isLoading = false;
 
-  // ---- Extended Mock Screener Data ----
-  const mockScreenerData = [
-    { code: '2330', name: '台積電', signal: 'BUY', trend: 'UPTREND', price: 595, change: 1.71, date: '2026-05-20', fresh: true },
-    { code: '2454', name: '聯發科', signal: 'SELL', trend: 'DOWNTREND', price: 1280, change: -2.13, date: '2026-05-20', fresh: true },
-    { code: '2317', name: '鴻海', signal: 'BUY', trend: 'UPTREND', price: 178, change: 0.85, date: '2026-05-20', fresh: true },
-    { code: '2881', name: '富邦金', signal: 'BUY', trend: 'SIDEWAYS', price: 88.5, change: 0.34, date: '2026-05-19', fresh: false },
-    { code: '3008', name: '大立光', signal: 'SELL', trend: 'DOWNTREND', price: 2150, change: -1.56, date: '2026-05-19', fresh: false },
-    { code: '2303', name: '聯電', signal: 'BUY', trend: 'UPTREND', price: 52.3, change: 2.15, date: '2026-05-19', fresh: false },
-    { code: '2412', name: '中華電', signal: 'BUY', trend: 'SIDEWAYS', price: 132, change: 0.12, date: '2026-05-18', fresh: false },
-    { code: '2882', name: '國泰金', signal: 'SELL', trend: 'DOWNTREND', price: 65.2, change: -0.76, date: '2026-05-18', fresh: false },
-    { code: '2891', name: '中信金', signal: 'BUY', trend: 'UPTREND', price: 33.8, change: 1.04, date: '2026-05-17', fresh: false },
-    { code: '1301', name: '台塑', signal: 'SELL', trend: 'DOWNTREND', price: 73.5, change: -1.88, date: '2026-05-17', fresh: false },
-    { code: '2308', name: '台達電', signal: 'BUY', trend: 'UPTREND', price: 385, change: 1.32, date: '2026-05-16', fresh: false },
-    { code: '2886', name: '兆豐金', signal: 'BUY', trend: 'UPTREND', price: 45.6, change: 0.66, date: '2026-05-16', fresh: false },
-    { code: '2357', name: '華碩', signal: 'SELL', trend: 'SIDEWAYS', price: 498, change: -0.42, date: '2026-05-16', fresh: false },
-    { code: '2382', name: '廣達', signal: 'BUY', trend: 'UPTREND', price: 315, change: 3.28, date: '2026-05-15', fresh: false },
-    { code: '3711', name: '日月光投控', signal: 'BUY', trend: 'UPTREND', price: 168, change: 1.45, date: '2026-05-15', fresh: false },
-    { code: '2002', name: '中鋼', signal: 'SELL', trend: 'DOWNTREND', price: 25.3, change: -2.31, date: '2026-05-15', fresh: false },
-    { code: '1303', name: '南亞', signal: 'SELL', trend: 'DOWNTREND', price: 58.7, change: -1.18, date: '2026-05-14', fresh: false },
-    { code: '2884', name: '玉山金', signal: 'BUY', trend: 'SIDEWAYS', price: 29.4, change: 0.51, date: '2026-05-14', fresh: false },
-    { code: '6505', name: '台塑化', signal: 'SELL', trend: 'DOWNTREND', price: 62.1, change: -1.74, date: '2026-05-14', fresh: false },
-    { code: '2892', name: '第一金', signal: 'BUY', trend: 'UPTREND', price: 32.5, change: 0.93, date: '2026-05-13', fresh: false }
-  ];
-
-  function init() {
+  async function init() {
     if (!initialized) {
       setupFilters();
       initialized = true;
     }
-    render();
+    
+    // 如果目前沒有資料，則顯示 Spinner 載入；如果有資料，先渲染並在背景靜態更新
+    if (screenerData.length === 0) {
+      await fetchData(false);
+    } else {
+      render();
+      fetchData(false, true); // 背景靜態更新
+    }
   }
 
   function setupFilters() {
-    // Signal filter buttons
+    // 訊號篩選按鈕
     document.getElementById('screener-signal-filter').addEventListener('click', (e) => {
       const btn = e.target.closest('.btn-filter');
       if (!btn) return;
@@ -50,7 +36,7 @@ const Screener = (() => {
       render();
     });
 
-    // Trend filter buttons
+    // 趨勢篩選按鈕
     document.getElementById('screener-trend-filter').addEventListener('click', (e) => {
       const btn = e.target.closest('.btn-filter');
       if (!btn) return;
@@ -60,21 +46,104 @@ const Screener = (() => {
       render();
     });
 
-    // Auto-refresh toggle
-    document.getElementById('screener-auto-refresh').addEventListener('change', (e) => {
-      if (e.target.checked) {
-        startAutoRefresh();
-        App.toast('自動更新已啟用 (每30秒)', 'info');
-      } else {
-        stopAutoRefresh();
-        App.toast('自動更新已停用', 'info');
+    // 自動更新開關
+    const autoRefreshToggle = document.getElementById('screener-auto-refresh');
+    if (autoRefreshToggle) {
+      autoRefreshToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          startAutoRefresh();
+          App.toast('自動更新已啟用 (每30秒)', 'info');
+        } else {
+          stopAutoRefresh();
+          App.toast('自動更新已停用', 'info');
+        }
+      });
+    }
+  }
+
+  // ── 從後端取得篩選資料 ──────────────────────────────────
+  async function fetchData(forceRefresh = false, isBackground = false) {
+    if (isLoading) return;
+    
+    const refreshBtn = document.getElementById('screener-refresh-btn');
+    const tbody = document.getElementById('screener-tbody');
+
+    if (!isBackground) {
+      isLoading = true;
+      if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = `<span>⏳</span> 掃描中...`;
       }
-    });
+      
+      // 顯示載入中的 Spinner 覆蓋
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align:center; padding: 4rem 0;">
+              <div class="loading-spinner" style="margin: 0 auto 1.25rem; width: 40px; height: 40px;"></div>
+              <div style="color: var(--cyan); font-size: 0.95rem; font-weight: 500;">市場股票掃描中，請稍候...</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;">(首次掃描約需 3-5 秒，隨後將啟用 5 分鐘快取)</div>
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    try {
+      const res = await App.apiFetch(`/api/screener?force_refresh=${forceRefresh}`);
+      if (res && res.results) {
+        screenerData = res.results;
+        
+        // 更新最後更新時間
+        const now = new Date();
+        const formattedTime = now.toLocaleString('zh-TW', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: false
+        });
+        
+        const lastUpdatedEl = document.getElementById('screener-last-updated');
+        if (lastUpdatedEl) {
+          lastUpdatedEl.textContent = `最後更新：${formattedTime}`;
+        }
+      } else {
+        if (!isBackground && tbody) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="9" style="text-align:center; color:var(--red); padding: 3rem 0;">
+                ⚠️ 無法取得篩選結果，請確認後端服務已啟動。
+              </td>
+            </tr>
+          `;
+        }
+        App.toast('掃描失敗，請確認後端連線', 'error');
+      }
+    } catch (err) {
+      console.error('[Screener Fetch Error]', err);
+      if (!isBackground && tbody) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" style="text-align:center; color:var(--red); padding: 3rem 0;">
+              ⚠️ 掃描期間發生異常錯誤。
+            </td>
+          </tr>
+        `;
+      }
+    } finally {
+      if (!isBackground) {
+        isLoading = false;
+        if (refreshBtn) {
+          refreshBtn.disabled = false;
+          refreshBtn.innerHTML = `🔄 重新篩選`;
+        }
+      }
+      render();
+    }
   }
 
   function getFilteredData() {
-    return mockScreenerData.filter(item => {
-      if (currentFilters.signal !== 'ALL' && item.signal !== currentFilters.signal) return false;
+    return screenerData.filter(item => {
+      if (currentFilters.signal !== 'ALL' && item.signal_type !== currentFilters.signal) return false;
       if (currentFilters.trend !== 'ALL' && item.trend !== currentFilters.trend) return false;
       return true;
     });
@@ -86,45 +155,75 @@ const Screener = (() => {
     const countBadge = document.getElementById('screener-count');
 
     if (countBadge) countBadge.textContent = filtered.length;
+    if (!tbody || isLoading) return;
 
-    if (!tbody) return;
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" style="text-align:center; color:var(--text-secondary); padding: 3rem 0;">
+            沒有符合當前篩選條件的訊號。
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    // 找出結果中最晚（最新）的訊號日期作為判斷是否為新鮮訊號 (fresh) 的依據
+    let latestDate = '';
+    if (screenerData.length > 0) {
+      latestDate = screenerData.reduce((max, r) => r.signal_date > max ? r.signal_date : max, '');
+    }
 
     tbody.innerHTML = filtered.map(item => {
-      const isUp = item.change >= 0;
-      const signalClass = item.signal === 'BUY' ? 'badge-buy' : 'badge-sell';
-      const signalText = item.signal === 'BUY' ? '買入' : '賣出';
+      const isBuy = item.signal_type === 'BUY';
+      const signalClass = isBuy ? 'badge-buy' : 'badge-sell';
+      const signalText = isBuy ? '買入' : '賣出';
 
       const trendMap = {
         UPTREND: { cls: 'badge-uptrend', text: '上升' },
         DOWNTREND: { cls: 'badge-downtrend', text: '下降' },
         SIDEWAYS: { cls: 'badge-sideways', text: '盤整' }
       };
-      const trend = trendMap[item.trend] || trendMap.SIDEWAYS;
+      const trend = trendMap[item.trend] || { cls: 'badge-sideways', text: '盤整' };
 
-      const freshClass = item.fresh
-        ? `fresh-signal ${item.signal === 'SELL' ? 'sell-signal' : ''}`
+      // 判斷是否為當日/最最新一天的訊號
+      const isFresh = item.signal_date === latestDate;
+      const freshClass = isFresh
+        ? `fresh-signal ${!isBuy ? 'sell-signal' : ''}`
         : '';
 
+      // 台灣股市漲跌顏色慣例：紅漲、綠跌、灰平
+      const changeVal = item.change || 0.0;
+      let changeColor = 'var(--text-secondary)';
+      let changeText = '0.00%';
+      if (changeVal > 0) {
+        changeColor = 'var(--red)';
+        changeText = `+${changeVal.toFixed(2)}%`;
+      } else if (changeVal < 0) {
+        changeColor = 'var(--green)';
+        changeText = `${changeVal.toFixed(2)}%`;
+      }
+
       return `
-        <tr class="table-row-clickable" onclick="window.location.hash='analysis'; setTimeout(() => Analysis.loadStock('${item.code}'), 300);">
+        <tr class="table-row-clickable" onclick="window.location.hash='analysis'; setTimeout(() => Analysis.loadStock('${item.stock_id}'), 300);">
           <td>
-            <span class="signal-dot ${item.signal === 'BUY' ? 'buy' : 'sell'} ${freshClass}"
-              style="display:inline-block; width:8px; height:8px; border-radius:50%; ${item.signal === 'BUY'
+            <span class="signal-dot ${isBuy ? 'buy' : 'sell'} ${freshClass}"
+              style="display:inline-block; width:8px; height:8px; border-radius:50%; ${isBuy
                 ? 'background:var(--green); box-shadow:0 0 8px var(--green-glow);'
                 : 'background:var(--red); box-shadow:0 0 8px var(--red-glow);'}">
             </span>
           </td>
-          <td><strong>${item.code}</strong></td>
-          <td>${item.name}</td>
+          <td><strong>${item.stock_id}</strong></td>
+          <td>${item.stock_name}</td>
           <td><span class="badge ${signalClass}">${signalText}</span></td>
           <td><span class="badge ${trend.cls}">${trend.text}</span></td>
-          <td style="font-variant-numeric:tabular-nums;">$${item.price.toLocaleString()}</td>
-          <td style="color: ${isUp ? 'var(--red)' : 'var(--green)'}; font-weight:600; font-variant-numeric:tabular-nums;">
-            ${isUp ? '+' : ''}${item.change}%
+          <td style="font-variant-numeric:tabular-nums;">$${item.price.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          <td style="color: ${changeColor}; font-weight:600; font-variant-numeric:tabular-nums;">
+            ${changeText}
           </td>
-          <td style="color:var(--text-secondary)">${item.date}</td>
+          <td style="color:var(--text-secondary)">${item.signal_date}</td>
           <td>
-            <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); window.location.hash='analysis'; setTimeout(() => Analysis.loadStock('${item.code}'), 300);">
+            <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); window.location.hash='analysis'; setTimeout(() => Analysis.loadStock('${item.stock_id}'), 300);">
               📈 分析
             </button>
           </td>
@@ -133,19 +232,19 @@ const Screener = (() => {
     }).join('');
   }
 
+  // 手動重新篩選
   function refresh() {
-    App.toast('重新篩選中...', 'info');
-    setTimeout(() => {
-      render();
-      App.toast('篩選結果已更新', 'success');
-    }, 500);
+    App.toast('手動重新整理，開始強制掃描市場...', 'info');
+    fetchData(true);
   }
 
   function startAutoRefresh() {
     stopAutoRefresh();
+    // 使用設定中的重新整理間隔，預設 30 秒
+    const interval = (App.state.settings && App.state.settings.refreshInterval) || 30;
     autoRefreshTimer = setInterval(() => {
-      render();
-    }, 30000);
+      fetchData(false, true); // 背景非強制刷新，讀取快取
+    }, interval * 1000);
   }
 
   function stopAutoRefresh() {

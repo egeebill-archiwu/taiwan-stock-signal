@@ -171,11 +171,12 @@ async def get_stock_data(
     period: str = Query(default="6mo", description="資料期間：1mo/3mo/6mo/1y/2y"),
     start: Optional[str] = Query(default=None, description="起始日期 YYYY-MM-DD"),
     end: Optional[str] = Query(default=None, description="結束日期 YYYY-MM-DD"),
+    token: Optional[str] = Query(default=None, description="FinMind API Token"),
 ):
     """
     取得股票 OHLCV 資料及技術指標
-
-    回傳包含布林通道、均線、帶寬、趨勢判斷的完整資料。
+ 
+    回傳包含布林通道、均線、帶寬、趨勢判斷、KD/MACD/RSI及法人籌碼的完整資料。
     """
     try:
         df = fetch_stock_data(stock_id, period=period, start=start, end=end)
@@ -184,9 +185,9 @@ async def get_stock_data(
                 status_code=404,
                 detail=f"找不到 {stock_id} 的股價資料"
             )
-
+ 
         # 計算所有指標
-        df = prepare_dataframe_with_indicators(df)
+        df = prepare_dataframe_with_indicators(df, token=token)
 
         # 轉為 JSON 格式，確保 NaN/Inf 轉為 None
         records = df.copy()
@@ -222,6 +223,151 @@ async def get_stock_data(
         raise
     except Exception as e:
         logger.error(f"取得 {stock_id} 資料時發生錯誤: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class AiAnalysisRequest(BaseModel):
+    """AI 智能診斷請求"""
+    gemini_key: Optional[str] = Field(None, description="Gemini API Key")
+    period: str = Field(default="3mo", description="分析期間")
+    finmind_token: Optional[str] = Field(None, description="FinMind API Token")
+
+
+@app.post("/api/stock/{stock_id}/ai-analysis", tags=["AI 智能分析"])
+async def analyze_stock_with_ai(
+    stock_id: str,
+    request: AiAnalysisRequest,
+):
+    """
+    對指定個股進行 AI 智能分析與策略診斷
+    
+    綜合布林通道位置、KD/MACD/RSI 指標及法人籌碼動向，由 Gemini AI 生成操作建議。
+    """
+    import os
+    import requests
+    
+    gemini_api_key = request.gemini_key or os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="請在設定頁面配置 Gemini API 金鑰，或於伺服器端設定 GEMINI_API_KEY 環境變數。"
+        )
+        
+    try:
+        # 1. 取得歷史資料與指標
+        df = fetch_stock_data(stock_id, period=request.period)
+        if df.empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"找不到 {stock_id} 的股價資料"
+            )
+            
+        df = prepare_dataframe_with_indicators(df, token=request.finmind_token)
+        
+        # 2. 取最近 20 天的資料摘要
+        recent = df.tail(20).copy()
+        summary_rows = []
+        for _, row in recent.iterrows():
+            date_str = row["date"].strftime("%Y-%m-%d")
+            vol_lots = int(row["volume"] / 1000)
+            
+            # 安全取得籌碼數值，若無則為 0
+            f_net = row.get("foreign_net") or 0.0
+            t_net = row.get("trust_net") or 0.0
+            r_net = row.get("retail_net") or 0.0
+            
+            row_summary = (
+                f"日期:{date_str} | 收盤:{row['close']:.2f} | "
+                f"布林位置[下軌:{row['BBL']:.2f}, 中軌:{row['BBM']:.2f}, 上軌:{row['BBU']:.2f}] | "
+                f"MA10:{row['MA']:.2f} | 帶寬:{row['bandwidth']:.1f}% | 趨勢:{row['trend']} | "
+                f"KD[K:{row['K']:.1f}, D:{row['D']:.1f}] | "
+                f"MACD[DIF:{row['macd_dif']:.2f}, DEA:{row['macd_dea']:.2f}, HIST:{row['macd_hist']:.2f}] | "
+                f"RSI:{row['RSI']:.1f} | "
+                f"外資買賣超:{f_net:.1f}張 | 投信買賣超:{t_net:.1f}張 | 估計散戶:{r_net:.1f}張"
+            )
+            summary_rows.append(row_summary)
+            
+        data_summary = "\n".join(summary_rows)
+        
+        current_price = recent["close"].iloc[-1]
+        prev_price = recent["close"].iloc[-2] if len(recent) > 1 else current_price
+        price_change = ((current_price - prev_price) / prev_price) * 100.0
+        
+        # 3. 建立 Prompt
+        prompt = f"""
+你是一位專業的台股投資分析師與量化交易專家。請針對以下股票數據，特別是「布林通道策略（Bollinger Bands）」、其他技術指標（KD、MACD、RSI）以及籌碼面（外資、投信、散戶資金流向）進行全面診斷，並判斷是否適合買入或賣出。
+
+股票代號：{stock_id}
+分析期間最後一日收盤價：{current_price} 元 ({price_change:+.2f}%)
+最近 20 天的關鍵交易數據：
+{data_summary}
+
+請根據數據進行以下分析：
+1. **布林通道位置與趨勢分析**：目前股價位於布林通道的哪個位置（上軌、中軌、下軌）？中軌斜率是上揚、下傾還是平緩？目前策略屬於哪種趨勢（UPTREND/DOWNTREND/SIDEWAYS）？
+2. **技術指標協同診斷**：KD 是否有黃金交叉或死亡交叉？MACD 柱狀體是擴大還是縮小？RSI 是否超買(>70)或超賣(<30)？
+3. **籌碼面分析**：外資與投信近期是買超還是賣超？散戶資金是否在退場？籌碼是否集中？
+4. **綜合買賣結論**：給予明確的交易訊號：買入 (BUY)、賣出 (SELL) 或觀望 (HOLD)。
+
+請務必以繁體中文回答，並且**僅**回傳一個標準的 JSON 格式字串，不要包含額外的 ```json 或其他 Markdown 標記，格式如下：
+{{
+  "signal": "BUY" | "SELL" | "HOLD",
+  "reason": "這個欄位請填寫基於上述分析的簡短診斷原因（限 200 字以內）",
+  "strategy": "這個欄位請填寫具體的操作策略建議，如進場點、加碼點或停損停利點（限 150 字以內）",
+  "risks": "這個欄位請填寫當前操作的主要風險與注意事項（限 100 字以內）"
+}}
+"""
+        # 4. 呼叫 Gemini API
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
+        headers = {"Content-Type": "application/json"}
+        body = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }]
+        }
+        
+        response = requests.post(url, json=body, headers=headers, timeout=15)
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini API 呼叫失敗: {response.text}"
+            )
+            
+        res_json = response.json()
+        try:
+            response_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Gemini API 回傳格式不符合預期: {res_json}"
+            )
+            
+        # 5. 清理與解析回傳的 JSON
+        clean_text = response_text.strip()
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]
+        elif clean_text.startswith("```"):
+            clean_text = clean_text[3:]
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]
+        clean_text = clean_text.strip()
+        
+        try:
+            result = json.loads(clean_text)
+        except Exception:
+            # 容錯處理：如果沒能成功返回 JSON，將整段文字包裝成預設結構
+            result = {
+                "signal": "HOLD",
+                "reason": f"AI 回傳解析失敗。原始內容如下：{response_text[:300]}",
+                "strategy": "請手動評估圖表與籌碼面指標。",
+                "risks": "API 連線或格式解析異常。"
+            }
+            
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"個股 AI 分析時發生錯誤: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -283,6 +429,7 @@ async def run_screener(
         description="股票代號（逗號分隔），留空則掃描全部主要上市股票",
     ),
     lookback_days: int = Query(default=5, description="只顯示最近 N 天內的訊號"),
+    force_refresh: bool = Query(default=False, description="是否強制重新掃描"),
 ):
     """
     市場篩選 - 掃描多檔股票找出活躍訊號
@@ -294,7 +441,11 @@ async def run_screener(
         if stock_ids:
             ids = [s.strip() for s in stock_ids.split(",") if s.strip()]
 
-        results = screen_stocks(stock_ids=ids, lookback_days=lookback_days)
+        results = screen_stocks(
+            stock_ids=ids,
+            lookback_days=lookback_days,
+            force_refresh=force_refresh,
+        )
 
         return {
             "scanned_count": len(ids) if ids else len(get_all_twse_stock_ids()),
@@ -302,9 +453,11 @@ async def run_screener(
             "results": [
                 {
                     "stock_id": r.stock_id,
+                    "stock_name": r.stock_name,
                     "signal_type": r.signal_type,
                     "trend": r.trend,
                     "price": r.price,
+                    "change": r.change,
                     "signal_date": r.signal_date.isoformat(),
                     "details": r.details,
                 }
