@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0a0e27">
-  <meta name="description" content="台股布林通道交易訊號系統 - 專業級技術分析平台">
-  <title>台股布林訊號 | Bollinger Band Signal System</title>
+  <meta name="description" content="台股布林/均線交易訊號系統 - 專業級技術分析平台">
+  <title>台股布林/均線訊號系統 | Stock Signal System</title>
   <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +20,7 @@
     <div class="loading-content">
       <div class="loading-logo">📊</div>
       <div class="loading-spinner"></div>
-      <div class="loading-text">台股布林訊號系統載入中...</div>
+      <div class="loading-text">台股布林/均線訊號系統載入中...</div>
     </div>
   </div>
 
@@ -34,7 +34,7 @@
       <div class="sidebar-header">
         <div class="logo" id="sidebar-logo" title="點擊或長按查看選股策略說明">
           <span class="logo-icon">📊</span>
-          <span class="logo-text">布林訊號</span>
+          <span class="logo-text">布林/均線</span>
         </div>
         <button class="sidebar-toggle" id="sidebar-toggle" aria-label="切換側邊欄">
           <span class="toggle-icon">☰</span>
@@ -796,62 +796,125 @@
   <div class="modal-overlay" id="strategy-modal-overlay">
     <div class="modal" id="strategy-modal-content" style="max-width: 720px;">
       <div class="modal-header">
-        <h3 class="modal-title">📊 布林通道選股策略說明</h3>
+        <h3 class="modal-title">📊 選股策略邏輯說明</h3>
         <button class="modal-close" id="strategy-modal-close">&times;</button>
       </div>
       <div class="modal-body" style="line-height: 1.6; color: var(--text-secondary); max-height: 70vh; overflow-y: auto;">
-        <p style="margin-bottom: 1.25rem; font-size: 0.95rem; color: var(--text-primary);">
-          本系統的核心邏輯基於<strong>布林通道 (Bollinger Bands)</strong> 指標，配合股價趨勢及短期 K 線排列特徵，於市場發生動能竭盡與趨勢反轉的臨界點，篩選出具備高勝率的買賣訊號。
-        </p>
         
-        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
-          <!-- 趨勢 -->
-          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--bg-card-border); border-radius: var(--radius-sm); padding: 1rem;">
-            <h4 style="color: var(--cyan); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
-              <span>📈</span> 1. 趨勢判定邏輯 (Trend)
-            </h4>
-            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">系統以 <strong>20 日移動平均線 (MA20，即布林中軌)</strong> 為核心判定中長線趨勢：</p>
-            <ul style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: disc;">
-              <li><strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>：MA20 斜率在過去 5 天內持續上揚，且收盤價高於 MA20。</li>
-              <li><strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>：MA20 斜率在過去 5 天內持續下跌，且收盤價低於 MA20。</li>
-              <li><strong style="color: var(--text-secondary);">盤整趨勢 (SIDEWAYS)</strong>：MA20 走平或不符合上述上揚/下跌條件。</li>
-            </ul>
-          </div>
+        <!-- Tab Buttons (Sheets) -->
+        <div class="strategy-modal-tabs" style="display: flex; gap: 10px; margin-bottom: 1.25rem; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px;">
+          <button class="strategy-tab-btn active" data-target="strategy-bb-content" style="background: transparent; border: none; color: var(--cyan); font-weight: 600; font-size: 0.95rem; padding: 6px 12px; cursor: pointer; border-bottom: 2px solid var(--cyan); transition: all 0.2s; outline: none;">布林通道策略</button>
+          <button class="strategy-tab-btn" data-target="strategy-ma-content" style="background: transparent; border: none; color: var(--text-muted); font-weight: 500; font-size: 0.95rem; padding: 6px 12px; cursor: pointer; transition: all 0.2s; outline: none;">均線糾結策略</button>
+        </div>
 
-          <!-- 買入 -->
-          <div style="background: rgba(0, 230, 118, 0.02); border: 1px solid rgba(0, 230, 118, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
-            <h4 style="color: var(--green); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
-              <span>🟢</span> 2. 買入訊號觸發條件 (BUY)
-            </h4>
-            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當市場出現超賣反彈機會時，系統將偵測買入時機：</p>
-            <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
-              <li><strong>趨勢前提</strong>：當前必須判定為 <strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>。</li>
-              <li><strong>股價位置</strong>：當日收盤價已接近或跌破 <strong>布林下軌 (BBL)</strong>（距離下軌 3% 以內）。</li>
-              <li><strong>K線組合</strong>：在此位置之前，必須有連續至少 <strong>3 根綠色 K 棒（陰線，收盤價 &lt; 開盤價）</strong>。</li>
-              <li><strong>訊號觸發</strong>：在連續綠 K 後，當天首度收出 <strong>紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
-            </ol>
-            <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
-              ※ 邏輯：股價於下降通道邊界發生連跌，隨後收紅棒代表短線賣壓竭盡、買方介入，屬於低檔反轉買點。
+        <!-- Sheet 1: Bollinger Bands -->
+        <div id="strategy-bb-content" class="strategy-content-panel" style="display: block;">
+          <p style="margin-bottom: 1.25rem; font-size: 0.95rem; color: var(--text-primary);">
+            本系統的第一套核心邏輯基於<strong>布林通道 (Bollinger Bands)</strong> 指標，配合股價趨勢及短期 K 線排列特徵，於市場發生動能竭盡與趨勢反轉的臨界點，篩選出具備高勝率的買賣訊號。
+          </p>
+          
+          <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <!-- 趨勢 -->
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--bg-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+              <h4 style="color: var(--cyan); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+                <span>📈</span> 1. 趨勢判定邏輯 (Trend)
+              </h4>
+              <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">系統以 <strong>20 日移動平均線 (MA20，即布林中軌)</strong> 為核心判定中長線趨勢：</p>
+              <ul style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: disc;">
+                <li><strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>：MA20 斜率在過去 5 天內持續上揚，且收盤價高於 MA20。</li>
+                <li><strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>：MA20 斜率在過去 5 天內持續下跌，且收盤價低於 MA20。</li>
+                <li><strong style="color: var(--text-secondary);">盤整趨勢 (SIDEWAYS)</strong>：MA20 走平或不符合上述上揚/下跌條件。</li>
+              </ul>
             </div>
-          </div>
 
-          <!-- 賣出 -->
-          <div style="background: rgba(255, 82, 82, 0.02); border: 1px solid rgba(255, 82, 82, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
-            <h4 style="color: var(--red); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
-              <span>🔴</span> 3. 賣出訊號觸發條件 (SELL)
-            </h4>
-            <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當多頭力道竭盡、股價面臨拉回風險時，系統將偵測賣出時機：</p>
-            <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
-              <li><strong>趨勢前提</strong>：當前必須判定為 <strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>。</li>
-              <li><strong>股價位置</strong>：當日收盤價已接近或突破 <strong>布林上軌 (BBU)</strong>（距離上軌 3% 以內）。</li>
-              <li><strong>K線組合</strong>：在此位置之前，必須有連續至少 <strong>3 根紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
-              <li><strong>訊號觸發</strong>：在連續紅 K 後，當天首度收出 <strong>綠色 K 棒（陰線，收盤價 &lt; 開盤價）</strong> 且當日收盤價 <strong>低於 10 日移動平均線 (MA10)</strong>。</li>
-            </ol>
-            <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
-              ※ 邏輯：股價於高檔強勢連漲突破軌道，隨後出現陰線反轉且跌破短天期支撐線（MA10），代表買盤潰散，屬於高檔多頭竭盡賣點。
+            <!-- 買入 -->
+            <div style="background: rgba(0, 230, 118, 0.02); border: 1px solid rgba(0, 230, 118, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+              <h4 style="color: var(--green); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+                <span>🟢</span> 2. 買入訊號觸發條件 (BUY)
+              </h4>
+              <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當市場出現超賣反彈機會時，系統將偵測買入時機：</p>
+              <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
+                <li><strong>趨勢前提</strong>：當前必須判定為 <strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>。</li>
+                <li><strong>股價位置</strong>：當日收盤價已接近或跌破 <strong>布林下軌 (BBL)</strong>（距離下軌 3% 以內）。</li>
+                <li><strong>K線組合</strong>：在此位置之前，必須有連續至少 <strong>3 根綠色 K 棒（陰線，收盤價 &lt; 開盤價）</strong>。</li>
+                <li><strong>訊號觸發</strong>：在連續綠 K 後，當天首度收出 <strong>紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
+              </ol>
+              <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+                ※ 邏輯：股價於下降通道邊界發生連跌，隨後收紅棒代表短線賣壓竭盡、買方介入，屬於低檔反轉買點。
+              </div>
+            </div>
+
+            <!-- 賣出 -->
+            <div style="background: rgba(255, 82, 82, 0.02); border: 1px solid rgba(255, 82, 82, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+              <h4 style="color: var(--red); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+                <span>🔴</span> 3. 賣出訊號觸發條件 (SELL)
+              </h4>
+              <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當多頭力道竭盡、股價面臨拉回風險時，系統將偵測賣出時機：</p>
+              <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
+                <li><strong>趨勢前提</strong>：當前必須判定為 <strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>。</li>
+                <li><strong>股價位置</strong>：當日收盤價已接近或突破 <strong>布林上軌 (BBU)</strong>（距離上軌 3% 以內）。</li>
+                <li><strong>K線組合</strong>：在此位置之前，必須有連續至少 <strong>3 根紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
+                <li><strong>訊號觸發</strong>：在連續紅 K 後，當天首度收出 <strong>綠色 K 棒（陰線，收盤價 &lt; 開盤價）</strong> 且當日收盤價 <strong>低於 10 日移動平均線 (MA10)</strong>。</li>
+              </ol>
+              <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+                ※ 邏輯：股價於高檔強勢連漲突破軌道，隨後出現陰線反轉且跌破短天期支撐線（MA10），代表買盤潰散，屬於高檔多頭竭盡賣點。
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Sheet 2: Moving Average Convergence -->
+        <div id="strategy-ma-content" class="strategy-content-panel" style="display: none;">
+          <p style="margin-bottom: 1.25rem; font-size: 0.95rem; color: var(--text-primary);">
+            本系統的第二套核心邏輯基於<strong>移動平均線糾結與突破</strong>，篩選出整理成熟、主力起頭表態的爆發性順勢突破標的。
+          </p>
+          
+          <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <!-- 趨勢 -->
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--bg-card-border); border-radius: var(--radius-sm); padding: 1rem;">
+              <h4 style="color: var(--cyan); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+                <span>📈</span> 1. 趨勢判定邏輯 (Trend)
+              </h4>
+              <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">系統以 <strong>60 日移動平均線 (MA60，季線)</strong> 作為中長線趨勢生命線：</p>
+              <ul style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: disc;">
+                <li><strong style="color: var(--green);">上升趨勢 (UPTREND)</strong>：今日收盤價高於 MA60，且 MA60 過去 5 天斜率方向持續上揚。</li>
+                <li><strong style="color: var(--red);">下降趨勢 (DOWNTREND)</strong>：今日收盤價低於 MA60，且 MA60 過去 5 天斜率方向持續下跌。</li>
+                <li><strong style="color: var(--text-secondary);">橫盤整理 (SIDEWAYS)</strong>：不符合上述上揚或下跌條件時。</li>
+              </ul>
+            </div>
+
+            <!-- 買入 -->
+            <div style="background: rgba(0, 230, 118, 0.02); border: 1px solid rgba(0, 230, 118, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+              <h4 style="color: var(--green); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+                <span>🟢</span> 2. 買入訊號觸發條件 (BUY)
+              </h4>
+              <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當籌碼整理完畢、首度向上發起攻擊突破時（K線圖上會顯示 **「訊號出現」**）：</p>
+              <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
+                <li><strong>糾結前提</strong>：最近 5 日內，日線(MA5)、週線(MA10)、月線(MA20)與季線(MA60)的最大與最小值差距在 <strong>4% 以內</strong>（代表均線高度收斂、籌碼整理完成）。</li>
+                <li><strong>突破紅K</strong>：今日收出 <strong>紅色 K 棒（陽線，收盤價 &gt; 開盤價）</strong>。</li>
+                <li><strong>全面站上</strong>：今日收盤價一舉 **強勢突破所有四條均線**（收盤價 &gt; 四條均線最大值），且前一日收盤價未站上所有均線。</li>
+              </ol>
+              <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+                ※ 邏輯：股價長期橫盤使均線高度糾結，首根站上所有均線的強勢紅K代表整理期結束、主力表態突破起漲點。
+              </div>
+            </div>
+
+            <!-- 賣出 -->
+            <div style="background: rgba(255, 82, 82, 0.02); border: 1px solid rgba(255, 82, 82, 0.15); border-radius: var(--radius-sm); padding: 1rem;">
+              <h4 style="color: var(--red); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; font-weight: 600;">
+                <span>🔴</span> 3. 賣出訊號觸發條件 (SELL)
+              </h4>
+              <p style="font-size: 0.9rem; margin-bottom: 0.5rem;">當跌破重要支撐、趨勢轉弱時：</p>
+              <ol style="padding-left: 1.25rem; font-size: 0.88rem; list-style-type: decimal;">
+                <li><strong>跌破月線</strong>：今日收盤價 <strong>跌破 20 日移動平均線 (MA20，月線)</strong>，且前一日收盤價大於等於月線。</li>
+              </ol>
+              <div style="margin-top: 0.5rem; font-size: 0.78rem; color: var(--text-muted); font-style: italic;">
+                ※ 邏輯：月線為中期上漲波段生命支撐線，收盤跌破代表多頭防線失守、回檔整理期將大幅拉長，建議獲利了結或停損。
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" id="strategy-modal-ok-btn">我知道了</button>

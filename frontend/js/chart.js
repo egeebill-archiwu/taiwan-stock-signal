@@ -147,10 +147,15 @@ const StockChart = (() => {
     chart.timeScale().fitContent();
 
     // Resize handler
+    let lastWidth = 0;
     resizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         chart.applyOptions({ width, height });
+        if (width > 0 && (lastWidth === 0 || Math.abs(width - lastWidth) > 50)) {
+          chart.timeScale().fitContent();
+        }
+        lastWidth = width;
       }
     });
     resizeObserver.observe(container);

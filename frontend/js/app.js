@@ -289,6 +289,28 @@ const App = (() => {
         closeStrategyModal();
       }
     });
+
+    // Tab switching logic inside strategy modal
+    const tabBtns = modal.querySelectorAll('.strategy-tab-btn');
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabBtns.forEach(b => {
+          b.classList.remove('active');
+          b.style.color = 'var(--text-muted)';
+          b.style.borderBottom = 'none';
+          b.style.fontWeight = '500';
+        });
+        btn.classList.add('active');
+        btn.style.color = 'var(--cyan)';
+        btn.style.borderBottom = '2px solid var(--cyan)';
+        btn.style.fontWeight = '600';
+
+        const targetId = btn.dataset.target;
+        modal.querySelectorAll('.strategy-content-panel').forEach(panel => {
+          panel.style.display = panel.id === targetId ? 'block' : 'none';
+        });
+      });
+    });
   }
 
   // ---- Dashboard ----
@@ -612,10 +634,8 @@ const Analysis = (() => {
       </div>
     `;
 
-    await Promise.all([
-      fetchAndRenderChart(cleanCode),
-      fetchAndRenderSignals(cleanCode)
-    ]);
+    await fetchAndRenderChart(cleanCode);
+    await fetchAndRenderSignals(cleanCode);
   }
 
   // ── 取得股價資料並繪製圖表 ──────────────────────────────
@@ -757,16 +777,25 @@ const Analysis = (() => {
     }
 
     // 把訊號標記加到圖上
-    if (chartInstance && signals.length > 0 && typeof StockChart !== 'undefined') {
+    if (chartInstance && typeof StockChart !== 'undefined') {
       const isMaConv = strategy === 'ma_conv';
-      const markers = signals.map(s => ({
+      const markers = (signals || []).map(s => ({
         time: s.date,
         position: s.signal_type === 'BUY' ? 'belowBar' : 'aboveBar',
         color: s.signal_type === 'BUY' ? '#00e676' : '#ff5252',
         shape: s.signal_type === 'BUY' ? 'arrowUp' : 'arrowDown',
         text: s.signal_type === 'BUY' ? (isMaConv ? '訊號出現' : '買') : '賣'
       }));
-      StockChart.addSignalMarkers(chartInstance, markers);
+      
+      // 使用 setTimeout 確保圖表容器尺寸已完全穩定，避免行動裝置因版面計算延遲而無法正確顯示訊號標記
+      setTimeout(() => {
+        if (chartInstance && chartInstance.chart) {
+          if (markers.length > 0) {
+            StockChart.addSignalMarkers(chartInstance, markers);
+          }
+          chartInstance.chart.timeScale().fitContent();
+        }
+      }, 300);
     }
 
     // 歷史訊號列表
