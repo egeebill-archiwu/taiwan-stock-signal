@@ -305,6 +305,9 @@
 
             <!-- Stock Info Header -->
             <div class="card stock-header" id="analysis-stock-header" style="display:none;">
+              <button class="btn btn-sm btn-ghost back-btn" id="analysis-back-btn" onclick="window.location.hash = App.state.previousPage || 'screener'">
+                ← 返回
+              </button>
               <div class="stock-info-main">
                 <div class="stock-name-group">
                   <span class="stock-code" id="analysis-code">2330</span>

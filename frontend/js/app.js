@@ -15,6 +15,7 @@ const App = (() => {
   // ---- Global State ----
   const state = {
     currentPage: 'dashboard',
+    previousPage: 'dashboard',
     settings: {},
     stocks: {
       '2330': '台積電', '2454': '聯發科', '2317': '鴻海',
@@ -115,6 +116,10 @@ const App = (() => {
 
   function navigateTo(page) {
     if (!pageTitles[page]) page = 'dashboard';
+
+    if (state.currentPage !== page) {
+      state.previousPage = state.currentPage;
+    }
 
     document.querySelectorAll('.nav-item').forEach(item => {
       item.classList.toggle('active', item.dataset.page === page);
