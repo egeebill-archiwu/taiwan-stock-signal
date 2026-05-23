@@ -758,12 +758,13 @@ const Analysis = (() => {
 
     // 把訊號標記加到圖上
     if (chartInstance && signals.length > 0 && typeof StockChart !== 'undefined') {
+      const isMaConv = strategy === 'ma_conv';
       const markers = signals.map(s => ({
         time: s.date,
         position: s.signal_type === 'BUY' ? 'belowBar' : 'aboveBar',
         color: s.signal_type === 'BUY' ? '#00e676' : '#ff5252',
         shape: s.signal_type === 'BUY' ? 'arrowUp' : 'arrowDown',
-        text: s.signal_type === 'BUY' ? '買' : '賣'
+        text: s.signal_type === 'BUY' ? (isMaConv ? '訊號出現' : '買') : '賣'
       }));
       StockChart.addSignalMarkers(chartInstance, markers);
     }
