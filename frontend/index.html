@@ -612,6 +612,22 @@
         <section class="page" id="page-settings" data-page="settings">
           <div class="page-inner fade-in">
             <div class="settings-grid">
+              <!-- Strategy Settings -->
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><span class="title-icon">🎯</span> 策略設定</h3>
+                </div>
+                <div class="card-body">
+                  <div class="form-group">
+                    <label class="form-label">當前選股策略</label>
+                    <select class="form-input" id="set-active-strategy" onchange="Settings.onStrategyChange()">
+                      <option value="bb" selected>布林通道策略（逆勢反轉）</option>
+                      <option value="ma_conv">均線糾結策略（順勢突破）</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <!-- API Settings -->
               <div class="card">
                 <div class="card-header">

@@ -106,6 +106,7 @@ class BacktestRequest(BaseModel):
     consecutive_k: int = Field(
         default=CONSECUTIVE_K_THRESHOLD, description="連續 K 棒門檻"
     )
+    strategy: str = Field(default="bb", description="策略類型：bb / ma_conv")
 
 
 class TradeCreateRequest(BaseModel):
@@ -172,6 +173,7 @@ async def get_stock_data(
     start: Optional[str] = Query(default=None, description="起始日期 YYYY-MM-DD"),
     end: Optional[str] = Query(default=None, description="結束日期 YYYY-MM-DD"),
     token: Optional[str] = Query(default=None, description="FinMind API Token"),
+    strategy: str = Query(default="bb", description="策略類型：bb / ma_conv"),
 ):
     """
     取得股票 OHLCV 資料及技術指標
@@ -187,7 +189,7 @@ async def get_stock_data(
             )
  
         # 計算所有指標
-        df = prepare_dataframe_with_indicators(df, token=token)
+        df = prepare_dataframe_with_indicators(df, token=token, strategy=strategy)
 
         # 轉為 JSON 格式，確保 NaN/Inf 轉為 None
         records = df.copy()
@@ -382,6 +384,7 @@ async def get_stock_signals(
     consecutive_k: int = Query(
         default=CONSECUTIVE_K_THRESHOLD, description="連續 K 棒門檻"
     ),
+    strategy: str = Query(default="bb", description="策略類型：bb / ma_conv"),
 ):
     """
     取得指定股票的交易訊號
@@ -396,7 +399,11 @@ async def get_stock_signals(
                 detail=f"找不到 {stock_id} 的股價資料"
             )
 
-        signals = detect_all_signals(df, consecutive_k=consecutive_k)
+        if strategy == "ma_conv":
+            from backend.strategy.ma_convergence import detect_ma_signals
+            signals = detect_ma_signals(df)
+        else:
+            signals = detect_all_signals(df, consecutive_k=consecutive_k)
 
         return {
             "stock_id": stock_id,
@@ -431,6 +438,7 @@ async def run_screener(
     ),
     lookback_days: int = Query(default=5, description="只顯示最近 N 天內的訊號"),
     force_refresh: bool = Query(default=False, description="是否強制重新掃描"),
+    strategy: str = Query(default="bb", description="策略類型：bb / ma_conv"),
 ):
     """
     市場篩選 - 掃描多檔股票找出活躍訊號
@@ -446,6 +454,7 @@ async def run_screener(
             stock_ids=ids,
             lookback_days=lookback_days,
             force_refresh=force_refresh,
+            strategy=strategy,
         )
 
         return {
@@ -494,6 +503,7 @@ async def run_backtest_api(
             bb_std=request.bb_std,
             ma_period=request.ma_period,
             consecutive_k=request.consecutive_k,
+            strategy=request.strategy,
         )
 
         # 將結果存入資料庫

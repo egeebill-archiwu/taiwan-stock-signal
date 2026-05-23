@@ -326,7 +326,8 @@ def detect_all_signals(
 
 def prepare_dataframe_with_indicators(
     df: pd.DataFrame,
-    token: Optional[str] = None
+    token: Optional[str] = None,
+    strategy: str = "bb"
 ) -> pd.DataFrame:
     """
     準備包含所有指標與趨勢的完整 DataFrame（供 API 回傳使用）
@@ -337,6 +338,8 @@ def prepare_dataframe_with_indicators(
         原始股價 DataFrame
     token : str, optional
         FinMind API Token
+    strategy : str, optional
+        策略類型
 
     Returns
     -------
@@ -346,8 +349,12 @@ def prepare_dataframe_with_indicators(
     if df.empty:
         return df
 
-    df = add_all_indicators(df)
-    df = add_trend_column(df)
+    if strategy == "ma_conv":
+        from backend.strategy.ma_convergence import calculate_ma_indicators
+        df = calculate_ma_indicators(df)
+    else:
+        df = add_all_indicators(df)
+        df = add_trend_column(df)
 
     # 籌碼數據整合
     if "date" in df.columns:

@@ -70,7 +70,7 @@ const Backtest = (() => {
     }
   }
 
-  function run() {
+  async function run() {
     const stockCode = document.getElementById('bt-stock-code').value.trim();
     const startDate = document.getElementById('bt-start-date').value;
     const endDate = document.getElementById('bt-end-date').value;
@@ -83,10 +83,9 @@ const Backtest = (() => {
       return;
     }
 
-    const stockName = App.state.stocks[stockCode];
+    let stockName = (App.state.stocks && App.state.stocks[stockCode]) || '';
     if (!stockName) {
-      App.toast(`找不到股票代碼 ${stockCode}`, 'error');
-      return;
+      stockName = '台股';
     }
 
     App.toast(`正在回測 ${stockCode} ${stockName}...`, 'info');
@@ -96,38 +95,99 @@ const Backtest = (() => {
     btn.disabled = true;
     btn.textContent = '⏳ 回測中...';
 
-    setTimeout(() => {
+    const strategy = (App.state.settings && App.state.settings.activeStrategy) || 'bb';
+
+    try {
+      const res = await App.apiFetch('/api/backtest', {
+        method: 'POST',
+        body: JSON.stringify({
+          stock_id: stockCode,
+          start_date: startDate,
+          end_date: endDate,
+          initial_capital: parseFloat(capital) || 1000000,
+          bb_period: parseInt(bbPeriod) || 20,
+          bb_std: parseFloat(bbStd) || 2.0,
+          ma_period: 10,
+          consecutive_k: 3,
+          strategy: strategy
+        })
+      });
+
       btn.disabled = false;
       btn.textContent = '🚀 開始回測';
 
-      // Show results
-      document.getElementById('bt-results').style.display = 'block';
+      if (res && res.summary) {
+        // Show results
+        document.getElementById('bt-results').style.display = 'block';
 
-      // Update summary
-      document.getElementById('bt-total-return').textContent = mockResults.summary.totalReturn;
-      document.getElementById('bt-win-rate').textContent = mockResults.summary.winRate;
-      document.getElementById('bt-max-dd').textContent = mockResults.summary.maxDrawdown;
-      document.getElementById('bt-sharpe').textContent = mockResults.summary.sharpeRatio;
+        // Update summary
+        const totalReturn = res.summary.total_return_pct;
+        const totalReturnStr = (totalReturn >= 0 ? '+' : '') + totalReturn.toFixed(2) + '%';
+        const winRateStr = res.performance.win_rate.toFixed(1) + '%';
+        const maxDdStr = (res.performance.max_drawdown >= 0 ? '-' : '') + Math.abs(res.performance.max_drawdown).toFixed(2) + '%';
+        const sharpeStr = res.performance.sharpe_ratio !== null && res.performance.sharpe_ratio !== undefined
+          ? res.performance.sharpe_ratio.toFixed(2)
+          : '0.00';
 
-      // Render charts and tables
-      renderEquityCurve();
-      renderTradeTable();
+        document.getElementById('bt-total-return').textContent = totalReturnStr;
+        document.getElementById('bt-win-rate').textContent = winRateStr;
+        document.getElementById('bt-max-dd').textContent = maxDdStr;
+        document.getElementById('bt-sharpe').textContent = sharpeStr;
 
-      // Scroll to results
-      document.getElementById('bt-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Render charts and tables
+        renderEquityCurve(res.equity_curve);
+        renderTradeTable(res.trades);
 
-      App.toast(`${stockCode} ${stockName} 回測完成！`, 'success');
-    }, 1500);
+        // Scroll to results
+        document.getElementById('bt-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        App.toast(`${stockCode} ${stockName} 回測完成！`, 'success');
+      } else {
+        throw new Error('API 回傳格式不正確');
+      }
+    } catch (err) {
+      console.warn('[Backtest API Error] Fallback to mock data.', err);
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '🚀 開始回測';
+
+        // Show results
+        document.getElementById('bt-results').style.display = 'block';
+
+        // Update summary
+        document.getElementById('bt-total-return').textContent = mockResults.summary.totalReturn;
+        document.getElementById('bt-win-rate').textContent = mockResults.summary.winRate;
+        document.getElementById('bt-max-dd').textContent = mockResults.summary.maxDrawdown;
+        document.getElementById('bt-sharpe').textContent = mockResults.summary.sharpeRatio;
+
+        // Render charts and tables
+        renderEquityCurve();
+        renderTradeTable();
+
+        // Scroll to results
+        document.getElementById('bt-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        App.toast(`${stockCode} ${stockName} 回測完成！(使用模擬數據)`, 'success');
+      }, 1000);
+    }
   }
 
-  function renderEquityCurve() {
+  function renderEquityCurve(apiEquityCurve) {
     const canvas = document.getElementById('bt-equity-chart');
     if (!canvas) return;
     if (equityChartInstance) equityChartInstance.destroy();
 
-    const data = mockResults.equityCurve;
-    const labels = data.map(d => d.date);
-    const values = data.map(d => d.value);
+    const data = apiEquityCurve || mockResults.equityCurve;
+    const labels = data.map(d => {
+      const dateStr = d.date || d.fullDate;
+      if (dateStr && dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+      }
+      return d.date || '';
+    });
+    const values = data.map(d => d.portfolio_value !== undefined ? d.portfolio_value : d.value);
+    const initialCapital = (data[0] && (data[0].portfolio_value !== undefined ? data[0].portfolio_value : data[0].value)) || 1000000;
 
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 350);
@@ -152,7 +212,7 @@ const Backtest = (() => {
           pointHoverBackgroundColor: '#00e676'
         }, {
           label: '基準線',
-          data: new Array(values.length).fill(1000000),
+          data: new Array(values.length).fill(initialCapital),
           borderColor: 'rgba(255, 255, 255, 0.15)',
           borderWidth: 1,
           borderDash: [5, 5],
@@ -189,11 +249,11 @@ const Backtest = (() => {
               label: (ctx) => {
                 if (ctx.datasetIndex === 0) {
                   const val = ctx.parsed.y;
-                  const pnl = val - 1000000;
-                  const pct = ((pnl / 1000000) * 100).toFixed(2);
+                  const pnl = val - initialCapital;
+                  const pct = ((pnl / initialCapital) * 100).toFixed(2);
                   return `權益: $${val.toLocaleString()} (${pnl >= 0 ? '+' : ''}${pct}%)`;
                 }
-                return `初始資金: $1,000,000`;
+                return `初始資金: $${initialCapital.toLocaleString()}`;
               }
             }
           }
@@ -220,25 +280,39 @@ const Backtest = (() => {
     });
   }
 
-  function renderTradeTable() {
+  function renderTradeTable(apiTrades) {
     const tbody = document.getElementById('bt-trade-tbody');
     if (!tbody) return;
 
-    tbody.innerHTML = mockResults.trades.map(t => {
-      const isProfit = t.pnl >= 0;
+    const trades = apiTrades || mockResults.trades;
+    if (trades.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="8" style="text-align:center; color:var(--text-secondary); padding: 2rem 0;">
+            此期間無交易紀錄。
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = trades.map((t, index) => {
+      const pnl = t.profit_loss !== undefined ? t.profit_loss : t.pnl;
+      const isProfit = pnl >= 0;
+      const returnPct = t.return_pct !== undefined ? t.return_pct : t.returnPct;
       return `
         <tr>
-          <td>${t.id}</td>
+          <td>${index + 1}</td>
           <td><span class="badge badge-buy">做多</span></td>
-          <td>${t.buyDate}</td>
-          <td style="font-variant-numeric:tabular-nums;">$${t.buyPrice.toLocaleString()}</td>
-          <td>${t.sellDate}</td>
-          <td style="font-variant-numeric:tabular-nums;">$${t.sellPrice.toLocaleString()}</td>
+          <td>${t.buy_date || t.buyDate}</td>
+          <td style="font-variant-numeric:tabular-nums;">$${(t.buy_price || t.buyPrice).toLocaleString()}</td>
+          <td>${t.sell_date || t.sellDate || '持倉中'}</td>
+          <td style="font-variant-numeric:tabular-nums;">$${t.sell_price ? t.sell_price.toLocaleString() : (t.sellPrice ? t.sellPrice.toLocaleString() : '-')}</td>
           <td style="color: ${isProfit ? 'var(--green)' : 'var(--red)'}; font-weight:600; font-variant-numeric:tabular-nums;">
-            ${isProfit ? '+' : ''}$${t.pnl.toLocaleString()}
+            ${isProfit ? '+' : ''}${pnl.toLocaleString()}
           </td>
           <td style="color: ${isProfit ? 'var(--green)' : 'var(--red)'}; font-weight:600; font-variant-numeric:tabular-nums;">
-            ${isProfit ? '+' : ''}${t.returnPct}%
+            ${isProfit ? '+' : ''}${returnPct}%
           </td>
         </tr>
       `;

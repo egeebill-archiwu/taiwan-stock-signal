@@ -64,20 +64,29 @@ _screener_cache = {
     "timestamp": 0.0,
     "results": None,
     "lookback_days": None,
-    "period": None
+    "period": None,
+    "strategy": None
 }
 CACHE_DURATION = 300  # 快取時效為 5 分鐘 (300 秒)
 
 
-def _screen_single_stock(sid: str, period: str, cutoff_date: date) -> list[ScreenerResult]:
+def _screen_single_stock(sid: str, period: str, cutoff_date: date, strategy: str = "bb") -> list[ScreenerResult]:
     """掃描單一股票的輔助函式（供 ThreadPool 呼叫）"""
     try:
         df = fetch_stock_data(sid, period=period)
-        if df.empty or len(df) < 25:
+        if df.empty:
             return []
 
-        # 偵測訊號
-        signals = detect_all_signals(df)
+        # 根據不同策略偵測訊號
+        if strategy == "ma_conv":
+            from backend.strategy.ma_convergence import detect_ma_signals
+            if len(df) < 65:
+                return []
+            signals = detect_ma_signals(df)
+        else:
+            if len(df) < 25:
+                return []
+            signals = detect_all_signals(df)
 
         # 篩選出大於等於截止日期的訊號
         recent_signals = [s for s in signals if s.date >= cutoff_date]
@@ -122,6 +131,7 @@ def screen_stocks(
     period: str = "6mo",
     lookback_days: int = 5,
     force_refresh: bool = False,
+    strategy: str = "bb",
 ) -> list[ScreenerResult]:
     """
     掃描市場，找出有活躍訊號的股票（支援多執行緒與快取）
@@ -155,7 +165,8 @@ def screen_stocks(
         _screener_cache["results"] is not None and 
         (current_time - _screener_cache["timestamp"]) < CACHE_DURATION and
         _screener_cache["lookback_days"] == lookback_days and
-        _screener_cache["period"] == period):
+        _screener_cache["period"] == period and
+        _screener_cache["strategy"] == strategy):
         logger.info(f"使用選股快取資料 (快取時間: {current_time - _screener_cache['timestamp']:.1f} 秒前)")
         return _screener_cache["results"]
 
@@ -173,7 +184,7 @@ def screen_stocks(
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # 提交所有股票的掃描任務
         future_to_sid = {
-            executor.submit(_screen_single_stock, sid, period, cutoff_date): sid
+            executor.submit(_screen_single_stock, sid, period, cutoff_date, strategy): sid
             for sid in stock_ids
         }
 
@@ -195,6 +206,7 @@ def screen_stocks(
         _screener_cache["results"] = results
         _screener_cache["lookback_days"] = lookback_days
         _screener_cache["period"] = period
+        _screener_cache["strategy"] = strategy
         logger.info("已更新選股結果至記憶體快取")
 
     logger.info(f"市場並行掃描完成：共發現 {len(results)} 個訊號")

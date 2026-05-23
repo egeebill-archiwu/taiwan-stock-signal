@@ -90,7 +90,8 @@ const Screener = (() => {
     }
 
     try {
-      const res = await App.apiFetch(`/api/screener?force_refresh=${forceRefresh}`);
+      const strategy = (App.state.settings && App.state.settings.activeStrategy) || 'bb';
+      const res = await App.apiFetch(`/api/screener?force_refresh=${forceRefresh}&strategy=${strategy}`);
       if (res && res.results) {
         screenerData = res.results;
         

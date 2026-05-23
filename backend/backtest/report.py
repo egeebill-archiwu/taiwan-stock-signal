@@ -60,7 +60,7 @@ def calculate_metrics(trades: list[BacktestTrade]) -> dict:
         "max_single_win": round(max(pnls), 2) if pnls else 0.0,
         "max_single_loss": round(min(pnls), 2) if pnls else 0.0,
         "avg_holding_days": round(sum(hold_days) / len(hold_days), 1) if hold_days else 0.0,
-        "profit_factor": round(total_profit / total_loss, 2) if total_loss > 0 else float("inf"),
+        "profit_factor": round(total_profit / total_loss, 2) if total_loss > 0 else (99.9 if total_profit > 0 else 0.0),
     }
 
 

@@ -425,6 +425,7 @@ const App = (() => {
       : window.location.origin;
 
     setVal('set-api-url', s.apiUrl !== undefined ? s.apiUrl : defaultApiUrl);
+    setVal('set-active-strategy', s.activeStrategy || 'bb');
     setVal('set-bb-period', s.bbPeriod || 20);
     setVal('set-bb-std', s.bbStd || 2.0);
     setVal('set-refresh-interval', s.refreshInterval || 30);
@@ -487,6 +488,7 @@ const Settings = (() => {
     const apiUrlInput = document.getElementById('set-api-url').value.trim();
     const settings = {
       apiUrl: apiUrlInput,
+      activeStrategy: document.getElementById('set-active-strategy').value,
       bbPeriod: parseInt(document.getElementById('set-bb-period').value),
       bbStd: parseFloat(document.getElementById('set-bb-std').value),
       maType: document.getElementById('set-ma-type').value,
@@ -526,6 +528,7 @@ const Settings = (() => {
       : window.location.origin;
 
     setVal('set-api-url', defaultApiUrl);
+    setVal('set-active-strategy', 'bb');
     setVal('set-api-key', '');
     setVal('set-finmind-token', '');
     setVal('set-gemini-key', '');
@@ -542,12 +545,24 @@ const Settings = (() => {
     App.toast('設定已重置', 'info');
   }
 
+  function onStrategyChange() {
+    save();
+    const strategy = App.state.settings.activeStrategy;
+    const label = strategy === 'ma_conv' ? '均線糾結策略（順勢突破）' : '布林通道策略（逆勢反轉）';
+    App.toast(`已切換選股策略至：${label}，篩選器與圖表將自動更新。`, 'success');
+    
+    // 如果目前在篩選頁，重新整理篩選資料
+    if (App.state.currentPage === 'screener' && typeof Screener !== 'undefined') {
+      Screener.refresh();
+    }
+  }
+
   function setVal(id, val) {
     const el = document.getElementById(id);
     if (el) el.value = val;
   }
 
-  return { testConnection, save, reset };
+  return { testConnection, save, reset, onStrategyChange };
 })();
 
 /* ============================================
@@ -609,7 +624,8 @@ const Analysis = (() => {
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">資料載入中...</div>';
 
     const token = App.state.settings.finmindToken || '';
-    const data = await App.apiFetch(`/api/stock/${code}/data?period=${currentPeriod}&token=${token}`);
+    const strategy = App.state.settings.activeStrategy || 'bb';
+    const data = await App.apiFetch(`/api/stock/${code}/data?period=${currentPeriod}&token=${token}&strategy=${strategy}`);
 
     if (!data || !data.data || data.data.length === 0) {
       container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--red)">⚠️ 無法取得股價資料，請確認股票代碼是否正確</div>';
@@ -673,13 +689,27 @@ const Analysis = (() => {
     if (typeof StockChart !== 'undefined') {
       container.innerHTML = '';
       chartInstance = StockChart.createStockChart('analysis-chart-container', candles);
-      if (bbData.length > 0) {
-        StockChart.addBollingerBandsFromData(chartInstance, bbData);
+      
+      const isMaConv = App.state.settings.activeStrategy === 'ma_conv';
+      if (isMaConv) {
+        const ma5Data = rows.filter(r => r.MA5 && r.date).map(r => ({ time: r.date.substring(0, 10), value: r.MA5 }));
+        const ma10Data = rows.filter(r => r.MA10 && r.date).map(r => ({ time: r.date.substring(0, 10), value: r.MA10 }));
+        const ma20Data = rows.filter(r => r.MA20 && r.date).map(r => ({ time: r.date.substring(0, 10), value: r.MA20 }));
+        const ma60Data = rows.filter(r => r.MA60 && r.date).map(r => ({ time: r.date.substring(0, 10), value: r.MA60 }));
+
+        if (ma5Data.length > 0) StockChart.addMAFromData(chartInstance, ma5Data, '#ff5252');
+        if (ma10Data.length > 0) StockChart.addMAFromData(chartInstance, ma10Data, '#ff9100');
+        if (ma20Data.length > 0) StockChart.addMAFromData(chartInstance, ma20Data, '#ffd700');
+        if (ma60Data.length > 0) StockChart.addMAFromData(chartInstance, ma60Data, '#b388ff');
       } else {
-        StockChart.addBollingerBands(chartInstance, candles);
-      }
-      if (maData.length > 0) {
-        StockChart.addMAFromData(chartInstance, maData, '#b388ff');
+        if (bbData.length > 0) {
+          StockChart.addBollingerBandsFromData(chartInstance, bbData);
+        } else {
+          StockChart.addBollingerBands(chartInstance, candles);
+        }
+        if (maData.length > 0) {
+          StockChart.addMAFromData(chartInstance, maData, '#b388ff');
+        }
       }
 
       // 繪製副圖表
@@ -694,7 +724,8 @@ const Analysis = (() => {
 
   // ── 取得訊號並標示在圖上 ──────────────────────────────
   async function fetchAndRenderSignals(code) {
-    const sigData = await App.apiFetch(`/api/stock/${code}/signals?period=${currentPeriod}`);
+    const strategy = App.state.settings.activeStrategy || 'bb';
+    const sigData = await App.apiFetch(`/api/stock/${code}/signals?period=${currentPeriod}&strategy=${strategy}`);
 
     const signalBadge = document.getElementById('analysis-signal-badge');
     const trendBadge = document.getElementById('analysis-trend-badge');
@@ -745,46 +776,85 @@ const Analysis = (() => {
     const grid = document.getElementById('analysis-bb-indicators');
     if (!grid) return;
 
-    const close = row.close || 0;
-    const upper = row.BBU || (close * 1.06);
-    const middle = row.BBM || close;
-    const lower = row.BBL || (close * 0.94);
-    const ma = row.MA || close;
-    const bandwidth = upper > 0 ? ((upper - lower) / middle * 100).toFixed(2) : '--';
-    const pbr = (upper - lower) > 0 ? (((close - lower) / (upper - lower)) * 100).toFixed(1) : '--';
-    const trend = row.trend || '--';
-    const trendLabels = { UPTREND: '⬆️ 上升趨勢', DOWNTREND: '⬇️ 下降趨勢', SIDEWAYS: '➡️ 盤整' };
+    const isMaConv = App.state.settings.activeStrategy === 'ma_conv';
 
-    grid.innerHTML = `
-      <div class="indicator-item">
-        <div class="indicator-value" style="color:var(--red)">${upper ? upper.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
-        <div class="indicator-label">上軌 (BBU)</div>
-      </div>
-      <div class="indicator-item">
-        <div class="indicator-value" style="color:var(--gold)">${middle ? middle.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
-        <div class="indicator-label">中軌 (MA20)</div>
-      </div>
-      <div class="indicator-item">
-        <div class="indicator-value" style="color:var(--green)">${lower ? lower.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
-        <div class="indicator-label">下軌 (BBL)</div>
-      </div>
-      <div class="indicator-item">
-        <div class="indicator-value" style="color:var(--purple)">${ma ? ma.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
-        <div class="indicator-label">MA10</div>
-      </div>
-      <div class="indicator-item">
-        <div class="indicator-value" style="color:var(--cyan)">${bandwidth}%</div>
-        <div class="indicator-label">布林帶寬</div>
-      </div>
-      <div class="indicator-item">
-        <div class="indicator-value" style="color:var(--gold)">${pbr}%</div>
-        <div class="indicator-label">%B 指標</div>
-      </div>
-      <div class="indicator-item" style="grid-column:span 2">
-        <div class="indicator-value" style="font-size:0.9rem">${trendLabels[trend] || trend}</div>
-        <div class="indicator-label">趨勢判斷</div>
-      </div>
-    `;
+    if (isMaConv) {
+      const ma5 = row.MA5 || 0;
+      const ma10 = row.MA10 || 0;
+      const ma20 = row.MA20 || 0;
+      const ma60 = row.MA60 || 0;
+      const dispersion = row.ma_dispersion !== undefined ? row.ma_dispersion.toFixed(2) : '--';
+      const trend = row.trend || '--';
+      const trendLabels = { UPTREND: '升勢 (季線上)', DOWNTREND: '跌勢 (季線下)', SIDEWAYS: '盤整糾結中' };
+
+      grid.innerHTML = `
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:#ff5252">${ma5 ? ma5.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">日線 (MA5)</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:#ff9100">${ma10 ? ma10.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">週線 (MA10)</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:#ffd700">${ma20 ? ma20.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">月線 (MA20)</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:#b388ff">${ma60 ? ma60.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">季線 (MA60)</div>
+        </div>
+        <div class="indicator-item" style="grid-column:span 2">
+          <div class="indicator-value" style="color:var(--cyan)">${dispersion}%</div>
+          <div class="indicator-label">均線糾結分散度</div>
+        </div>
+        <div class="indicator-item" style="grid-column:span 2">
+          <div class="indicator-value" style="font-size:0.9rem">${trendLabels[trend] || trend}</div>
+          <div class="indicator-label">生命線趨勢 (MA60)</div>
+        </div>
+      `;
+    } else {
+      const close = row.close || 0;
+      const upper = row.BBU || (close * 1.06);
+      const middle = row.BBM || close;
+      const lower = row.BBL || (close * 0.94);
+      const ma = row.MA || close;
+      const bandwidth = upper > 0 ? ((upper - lower) / middle * 100).toFixed(2) : '--';
+      const pbr = (upper - lower) > 0 ? (((close - lower) / (upper - lower)) * 100).toFixed(1) : '--';
+      const trend = row.trend || '--';
+      const trendLabels = { UPTREND: '⬆️ 上升趨勢', DOWNTREND: '⬇️ 下降趨勢', SIDEWAYS: '➡️ 盤整' };
+
+      grid.innerHTML = `
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:var(--red)">${upper ? upper.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">上軌 (BBU)</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:var(--gold)">${middle ? middle.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">中軌 (MA20)</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:var(--green)">${lower ? lower.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">下軌 (BBL)</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:var(--purple)">${ma ? ma.toLocaleString('zh-TW', {minimumFractionDigits:2,maximumFractionDigits:2}) : '--'}</div>
+          <div class="indicator-label">MA10</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:var(--cyan)">${bandwidth}%</div>
+          <div class="indicator-label">布林帶寬</div>
+        </div>
+        <div class="indicator-item">
+          <div class="indicator-value" style="color:var(--gold)">${pbr}%</div>
+          <div class="indicator-label">%B 指標</div>
+        </div>
+        <div class="indicator-item" style="grid-column:span 2">
+          <div class="indicator-value" style="font-size:0.9rem">${trendLabels[trend] || trend}</div>
+          <div class="indicator-label">趨勢判斷</div>
+        </div>
+      `;
+    }
   }
 
   function renderSignalHistory(signals) {

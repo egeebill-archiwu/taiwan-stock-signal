@@ -80,6 +80,7 @@ def run_backtest(
     bb_std: float = BB_STD,
     ma_period: int = MA_PERIOD,
     consecutive_k: int = CONSECUTIVE_K_THRESHOLD,
+    strategy: str = "bb",
 ) -> BacktestOutput:
     """
     執行回測
@@ -122,6 +123,7 @@ def run_backtest(
         "ma_period": ma_period,
         "consecutive_k": consecutive_k,
         "initial_capital": initial_capital,
+        "strategy": strategy,
     }
 
     # 取得歷史資料（多抓一些資料讓指標有足夠的預熱期）
@@ -138,7 +140,11 @@ def run_backtest(
         )
 
     # 偵測所有訊號
-    signals = detect_all_signals(df, consecutive_k=consecutive_k, ma_period=ma_period)
+    if strategy == "ma_conv":
+        from backend.strategy.ma_convergence import detect_ma_signals
+        signals = detect_ma_signals(df)
+    else:
+        signals = detect_all_signals(df, consecutive_k=consecutive_k, ma_period=ma_period)
 
     # 模擬交易
     cash = initial_capital
@@ -370,10 +376,20 @@ def backtest_result_to_db_dict(output: BacktestOutput) -> dict:
     dict
         對應 BacktestResult 資料表欄位的字典
     """
+    from datetime import datetime
+    
+    s_date = output.start_date
+    if isinstance(s_date, str):
+        s_date = datetime.strptime(s_date, "%Y-%m-%d").date()
+        
+    e_date = output.end_date
+    if isinstance(e_date, str):
+        e_date = datetime.strptime(e_date, "%Y-%m-%d").date()
+
     return {
         "stock_id": output.stock_id,
-        "start_date": output.start_date,
-        "end_date": output.end_date,
+        "start_date": s_date,
+        "end_date": e_date,
         "params_json": json.dumps(output.params, ensure_ascii=False),
         "total_trades": output.metrics.total_trades,
         "win_rate": output.metrics.win_rate,
