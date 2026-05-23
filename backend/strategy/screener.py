@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
-from backend.data.fetcher import fetch_stock_data, get_all_twse_stock_ids
+from backend.data.fetcher import fetch_stock_data, get_all_twse_stock_ids, get_stock_name
 from backend.strategy.signal_detector import detect_all_signals
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ def _screen_single_stock(sid: str, period: str, cutoff_date: date) -> list[Scree
             except Exception as ex:
                 logger.warning(f"計算 {sid} 在 {signal.date} 的漲跌幅時發生錯誤: {ex}")
 
-            stock_name = STOCK_NAMES.get(sid, sid)
+            stock_name = get_stock_name(sid)
             results.append(ScreenerResult(
                 stock_id=signal.stock_id,
                 stock_name=stock_name,

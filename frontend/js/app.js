@@ -630,8 +630,15 @@ const Analysis = (() => {
     const changePct = ((close - prevClose) / prevClose * 100).toFixed(2);
     const isUp = close >= prevClose;
 
+    // 取得 API 回傳的中文名稱（若有），並快取至全域對照表中
+    const name = data.stock_name || App.state.stocks[code] || code;
+    App.state.stocks[code] = name;
+
+    // 同步更新搜尋欄的顯示，防止顯示 8028 8028
+    document.getElementById('analysis-search').value = `${code} ${name}`;
+
     document.getElementById('analysis-code').textContent = code;
-    document.getElementById('analysis-name').textContent = App.state.stocks[code] || code;
+    document.getElementById('analysis-name').textContent = name;
     document.getElementById('analysis-price').textContent = close.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const changeEl = document.getElementById('analysis-change');

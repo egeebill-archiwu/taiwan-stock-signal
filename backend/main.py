@@ -29,7 +29,7 @@ from backend.config import (
     DEFAULT_INITIAL_CAPITAL, PROJECT_DIR,
 )
 from backend.data.database import create_all_tables, get_db
-from backend.data.fetcher import fetch_stock_data, get_all_twse_stock_ids
+from backend.data.fetcher import fetch_stock_data, get_all_twse_stock_ids, get_stock_name
 from backend.data.models import BacktestResult, Signal
 from backend.strategy.signal_detector import (
     detect_all_signals,
@@ -215,6 +215,7 @@ async def get_stock_data(
 
         return {
             "stock_id": stock_id,
+            "stock_name": get_stock_name(stock_id),
             "count": len(cleaned),
             "data": cleaned,
         }
