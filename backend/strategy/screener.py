@@ -11,8 +11,9 @@ import concurrent.futures
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
+import pandas as pd
 
-from backend.data.fetcher import fetch_stock_data, get_all_twse_stock_ids, get_stock_name
+from backend.data.fetcher import fetch_stock_data, get_all_twse_stock_ids, get_stock_name, _to_yahoo_ticker
 from backend.strategy.signal_detector import detect_all_signals
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ STOCK_NAMES = {
     "2881": "富邦金", "2882": "國泰金", "2891": "中信金", "2886": "兆豐金",
     "2884": "玉山金", "2885": "元大金", "2887": "台新金", "2890": "永豐金",
     "2880": "華南金", "2883": "開發金", "2892": "第一金", "5880": "合庫金",
-    "2888": "新光金", "5876": "上海商銀", "2889": "國票金", "2002": "中鋼",
+    "2888": "新光金", "2324": "仁寶", "5876": "上海商銀", "2889": "國票金", "2002": "中鋼",
     "1301": "台塑", "1303": "南亞", "1326": "台化", "6505": "台塑化",
     "1101": "台泥", "1102": "亞泥", "1216": "統一", "2912": "統一超",
     "1476": "儒鴻", "9910": "豐泰", "2207": "和泰車", "9921": "巨大",
@@ -70,10 +71,9 @@ _screener_cache = {
 CACHE_DURATION = 300  # 快取時效為 5 分鐘 (300 秒)
 
 
-def _screen_single_stock(sid: str, period: str, cutoff_date: date, strategy: str = "bb") -> list[ScreenerResult]:
-    """掃描單一股票的輔助函式（供 ThreadPool 呼叫）"""
+def _process_single_stock_df(sid: str, df: pd.DataFrame, cutoff_date: date, strategy: str = "bb") -> list[ScreenerResult]:
+    """從已整理好的 DataFrame 分析訊號的輔助函式"""
     try:
-        df = fetch_stock_data(sid, period=period)
         if df.empty:
             return []
 
@@ -96,7 +96,6 @@ def _screen_single_stock(sid: str, period: str, cutoff_date: date, strategy: str
             # 計算該訊號日期的漲跌幅
             change_val = 0.0
             try:
-                import pandas as pd
                 sig_ts = pd.to_datetime(signal.date).normalize()
                 matching_rows = df[df["date"] == sig_ts]
                 if not matching_rows.empty:
@@ -121,6 +120,16 @@ def _screen_single_stock(sid: str, period: str, cutoff_date: date, strategy: str
             ))
         return results
 
+    except Exception as e:
+        logger.error(f"分析 {sid} 訊號時發生錯誤: {e}")
+        return []
+
+
+def _screen_single_stock(sid: str, period: str, cutoff_date: date, strategy: str = "bb") -> list[ScreenerResult]:
+    """掃描單一股票的輔助函式（供 ThreadPool 呼叫）"""
+    try:
+        df = fetch_stock_data(sid, period=period)
+        return _process_single_stock_df(sid, df, cutoff_date, strategy)
     except Exception as e:
         logger.error(f"掃描 {sid} 時發生錯誤: {e}")
         return []
@@ -154,11 +163,6 @@ def screen_stocks(
     """
     global _screener_cache
 
-    # 判斷是否可以使用快取：
-    # 1. 不是強制整理 (force_refresh = False)
-    # 2. 請求的是預設的全部主要股票 (stock_ids 為 None)
-    # 3. 快取內容存在且未過期 (CACHE_DURATION 內)
-    # 4. 快取的 lookback_days 與 period 相同
     current_time = time.time()
     if (not force_refresh and 
         stock_ids is None and 
@@ -177,25 +181,82 @@ def screen_stocks(
     cutoff_date = date.today() - timedelta(days=lookback_days)
     total = len(stock_ids)
 
-    logger.info(f"開始並行掃描市場... 總共 {total} 檔股票，線程池設定 15 workers")
+    logger.info(f"開始批次下載與篩選市場... 總共 {total} 檔股票")
+    t_start = time.time()
 
-    # 使用 ThreadPoolExecutor 並行掃描
-    max_workers = 15
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 提交所有股票的掃描任務
-        future_to_sid = {
-            executor.submit(_screen_single_stock, sid, period, cutoff_date, strategy): sid
-            for sid in stock_ids
-        }
+    # 取得 Yahoo Tickers
+    tickers = [_to_yahoo_ticker(sid) for sid in stock_ids]
 
-        # 收集結果
-        for future in concurrent.futures.as_completed(future_to_sid):
-            sid = future_to_sid[future]
-            try:
-                stock_results = future.result()
-                results.extend(stock_results)
-            except Exception as e:
-                logger.error(f"並行掃描 {sid} 時發生異常: {e}")
+    # 執行批次下載
+    import yfinance as yf
+    try:
+        df_all = yf.download(tickers, period=period, group_by="ticker", auto_adjust=True, threads=True, progress=False)
+        logger.info(f"yfinance 批次下載完成，耗時: {time.time() - t_start:.2f} 秒")
+    except Exception as e:
+        logger.error(f"yfinance 批次下載失敗，切換為執行緒模式: {e}")
+        # fallback to ThreadPoolExecutor
+        max_workers = 15
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_sid = {
+                executor.submit(_screen_single_stock, sid, period, cutoff_date, strategy): sid
+                for sid in stock_ids
+            }
+            for future in concurrent.futures.as_completed(future_to_sid):
+                sid = future_to_sid[future]
+                try:
+                    stock_results = future.result()
+                    results.extend(stock_results)
+                except Exception as ex:
+                    logger.error(f"執行緒模式掃描 {sid} 失敗: {ex}")
+        
+        results.sort(key=lambda r: r.signal_date, reverse=True)
+        if stock_ids == get_all_twse_stock_ids():
+            _screener_cache["timestamp"] = current_time
+            _screener_cache["results"] = results
+            _screener_cache["lookback_days"] = lookback_days
+            _screener_cache["period"] = period
+            _screener_cache["strategy"] = strategy
+        return results
+
+    # 批次下載成功，開始在記憶體中處理資料
+    for sid in stock_ids:
+        ticker = _to_yahoo_ticker(sid)
+        try:
+            if hasattr(df_all.columns, "levels") and ticker in df_all.columns.levels[0]:
+                df_single = df_all[ticker].copy()
+            elif ticker in df_all.columns:
+                df_single = df_all.copy()
+            else:
+                continue
+                
+            if df_single.empty or df_single.dropna(how="all").empty:
+                continue
+                
+            df_single = df_single.reset_index()
+            df_single = df_single.rename(columns={
+                "Date": "date",
+                "Open": "open",
+                "High": "high",
+                "Low": "low",
+                "Close": "close",
+                "Volume": "volume",
+            })
+            
+            required_cols = ["date", "open", "high", "low", "close", "volume"]
+            if not all(col in df_single.columns for col in required_cols):
+                continue
+                
+            df_single = df_single[required_cols].copy()
+            df_single["date"] = pd.to_datetime(df_single["date"]).dt.tz_localize(None).dt.normalize()
+            df_single["stock_id"] = sid.replace(".TW", "").replace(".TWO", "")
+            df_single = df_single.dropna(subset=["open", "high", "low", "close"])
+            df_single = df_single.sort_values("date").reset_index(drop=True)
+            
+            # 計算訊號
+            stock_results = _process_single_stock_df(sid, df_single, cutoff_date, strategy)
+            results.extend(stock_results)
+        except Exception as e:
+            logger.error(f"記憶體中處理 {sid} 資料失敗: {e}")
 
     # 按訊號日期降冪排序（最新的在前）
     results.sort(key=lambda r: r.signal_date, reverse=True)
@@ -209,5 +270,5 @@ def screen_stocks(
         _screener_cache["strategy"] = strategy
         logger.info("已更新選股結果至記憶體快取")
 
-    logger.info(f"市場並行掃描完成：共發現 {len(results)} 個訊號")
+    logger.info(f"市場批次下載與篩選完成：共發現 {len(results)} 個訊號，總耗時 {time.time() - t_start:.2f} 秒")
     return results

@@ -112,7 +112,7 @@ def add_trend_column(
     lookback: int = TREND_LOOKBACK,
 ) -> pd.DataFrame:
     """
-    為 DataFrame 的每一列加入趨勢判斷欄位 'trend'
+    為 DataFrame 的每一列加入趨勢判斷欄位 'trend' (高效向量化優化版)
 
     Parameters
     ----------
@@ -127,15 +127,42 @@ def add_trend_column(
         加入 'trend' 欄位後的 DataFrame
     """
     df = df.copy()
-    trends = []
+    if df.empty or len(df) < lookback + 1:
+        df["trend"] = "SIDEWAYS"
+        return df
 
-    for i in range(len(df)):
-        if i < lookback:
-            trends.append("SIDEWAYS")
-        else:
-            trend = analyze_trend(df, lookback=lookback, idx=i)
-            trends.append(trend)
+    N = lookback + 1
+    x = np.arange(N)
+    denom = N * np.sum(x**2) - np.sum(x)**2
+    weights = (N * x - np.sum(x)) / denom
 
-    df["trend"] = trends
+    # 1. BBM 滾動斜率
+    slope = sum(df["BBM"].shift(lookback - idx) * weights[idx] for idx in range(N))
+
+    # 2. BBM 滾動均值
+    bbm_mean = df["BBM"].rolling(window=N).mean()
+
+    # 3. 斜率百分比 (避開分母為 0)
+    bbm_mean_safe = bbm_mean.replace(0, np.nan)
+    slope_pct = slope / bbm_mean_safe * 100
+
+    # 4. 帶寬變化
+    bw_change = df["bandwidth"] - df["bandwidth"].shift(lookback)
+    bandwidth_expanding = bw_change >= BANDWIDTH_EXPANDING_THRESHOLD
+
+    # 5. 向量化判定趨勢
+    is_uptrend = (slope_pct > 0.01) & (df["close"] > df["BBM"]) & bandwidth_expanding
+    is_downtrend = (slope_pct < -0.01) & (df["close"] < df["BBM"]) & bandwidth_expanding
+
+    df["trend"] = "SIDEWAYS"
+    df.loc[is_uptrend, "trend"] = "UPTREND"
+    df.loc[is_downtrend, "trend"] = "DOWNTREND"
+
+    # 前 lookback 筆設定為 SIDEWAYS
+    df.iloc[:lookback, df.columns.get_loc("trend")] = "SIDEWAYS"
+    
+    # 填充空值
+    df["trend"] = df["trend"].fillna("SIDEWAYS")
+
     logger.info(f"趨勢欄位計算完成 (lookback={lookback})")
     return df

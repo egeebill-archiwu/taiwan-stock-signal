@@ -76,12 +76,11 @@ def calculate_bandwidth(df: pd.DataFrame) -> pd.DataFrame:
         return df
 
     df = df.copy()
-    df["bandwidth"] = df.apply(
-        lambda row: ((row["BBU"] - row["BBL"]) / row["BBM"] * 100)
-        if pd.notna(row["BBM"]) and row["BBM"] != 0
-        else 0.0,
-        axis=1,
-    )
+    
+    # 向量化計算，避免緩慢的 df.apply(axis=1)
+    df["bandwidth"] = 0.0
+    valid_bbm = (df["BBM"].notna()) & (df["BBM"] != 0)
+    df.loc[valid_bbm, "bandwidth"] = (df.loc[valid_bbm, "BBU"] - df.loc[valid_bbm, "BBL"]) / df.loc[valid_bbm, "BBM"] * 100
 
     logger.info("布林帶寬計算完成")
     return df

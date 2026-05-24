@@ -110,25 +110,7 @@ def detect_buy_signal(
     consecutive_k: int = CONSECUTIVE_K_THRESHOLD,
 ) -> list[SignalResult]:
     """
-    偵測買進訊號
-
-    條件：
-    1. 趨勢為 DOWNTREND
-    2. 收盤價接近布林下軌
-    3. 前 N 根 K 棒為連續綠 K（下跌）
-    4. 當根為紅 K（反轉信號）
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        包含完整指標的 DataFrame（需有 BBL, BBM, BBU, MA, bandwidth, trend 欄位）
-    consecutive_k : int
-        最少連續綠 K 數量
-
-    Returns
-    -------
-    list[SignalResult]
-        買進訊號列表
+    偵測買進訊號 (高效 dict 記錄優化版)
     """
     signals: list[SignalResult] = []
 
@@ -136,35 +118,53 @@ def detect_buy_signal(
         return signals
 
     stock_id = df["stock_id"].iloc[0] if "stock_id" in df.columns else "UNKNOWN"
+    records = df.to_dict("records")
 
-    for i in range(consecutive_k + 1, len(df)):
-        row = df.iloc[i]
+    def is_red_k(row):
+        return row["close"] > row["open"]
 
-        # 略過含 NaN 的列
+    def is_green_k(row):
+        return row["close"] < row["open"]
+
+    def is_near_lower_band(row):
+        bbl = row.get("BBL")
+        if pd.isna(bbl) or bbl == 0:
+            return False
+        return (row["close"] - bbl) / bbl <= NEAR_BAND_PCT
+
+    def count_consecutive_green(idx):
+        cnt = 0
+        for i in range(idx - 1, -1, -1):
+            if is_green_k(records[i]):
+                cnt += 1
+            else:
+                break
+        return cnt
+
+    for i in range(consecutive_k + 1, len(records)):
+        row = records[i]
+
         if pd.isna(row.get("BBL")) or pd.isna(row.get("trend")):
             continue
 
-        # 條件 1：趨勢為下降趨勢
         if row["trend"] != "DOWNTREND":
             continue
 
-        # 條件 2：收盤價接近布林下軌
-        if not _is_near_lower_band(row):
+        if not is_near_lower_band(row):
             continue
 
-        # 條件 3：前面有足夠的連續綠 K
-        green_count = _count_consecutive_green_k(df, i)
+        green_count = count_consecutive_green(i)
         if green_count < consecutive_k:
             continue
 
-        # 條件 4：當根為紅 K（反轉訊號）
-        if not _is_red_k(row):
+        if not is_red_k(row):
             continue
 
-        # 取得日期
         signal_date = row["date"]
         if isinstance(signal_date, pd.Timestamp):
             signal_date = signal_date.date()
+        elif isinstance(signal_date, str):
+            signal_date = pd.to_datetime(signal_date).date()
 
         details = (
             f"買進訊號：連續 {green_count} 根綠 K 後出現紅 K 反轉，"
@@ -191,28 +191,7 @@ def detect_sell_signal(
     ma_period: int = MA_PERIOD,
 ) -> list[SignalResult]:
     """
-    偵測賣出訊號
-
-    條件：
-    1. 趨勢為 UPTREND
-    2. 收盤價接近布林上軌
-    3. 前 N 根 K 棒為連續紅 K（上漲）
-    4. 當根為綠 K（反轉信號）
-    5. 收盤價 < MA10
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        包含完整指標的 DataFrame
-    consecutive_k : int
-        最少連續紅 K 數量
-    ma_period : int
-        均線週期（用於確認跌破均線）
-
-    Returns
-    -------
-    list[SignalResult]
-        賣出訊號列表
+    偵測賣出訊號 (高效 dict 記錄優化版)
     """
     signals: list[SignalResult] = []
 
@@ -220,39 +199,56 @@ def detect_sell_signal(
         return signals
 
     stock_id = df["stock_id"].iloc[0] if "stock_id" in df.columns else "UNKNOWN"
+    records = df.to_dict("records")
 
-    for i in range(consecutive_k + 1, len(df)):
-        row = df.iloc[i]
+    def is_red_k(row):
+        return row["close"] > row["open"]
 
-        # 略過含 NaN 的列
+    def is_green_k(row):
+        return row["close"] < row["open"]
+
+    def is_near_upper_band(row):
+        bbu = row.get("BBU")
+        if pd.isna(bbu) or bbu == 0:
+            return False
+        return (bbu - row["close"]) / bbu <= NEAR_BAND_PCT
+
+    def count_consecutive_red(idx):
+        cnt = 0
+        for i in range(idx - 1, -1, -1):
+            if is_red_k(records[i]):
+                cnt += 1
+            else:
+                break
+        return cnt
+
+    for i in range(consecutive_k + 1, len(records)):
+        row = records[i]
+
         if pd.isna(row.get("BBU")) or pd.isna(row.get("trend")) or pd.isna(row.get("MA")):
             continue
 
-        # 條件 1：趨勢為上升趨勢
         if row["trend"] != "UPTREND":
             continue
 
-        # 條件 2：收盤價接近布林上軌
-        if not _is_near_upper_band(row):
+        if not is_near_upper_band(row):
             continue
 
-        # 條件 3：前面有足夠的連續紅 K
-        red_count = _count_consecutive_red_k(df, i)
+        red_count = count_consecutive_red(i)
         if red_count < consecutive_k:
             continue
 
-        # 條件 4：當根為綠 K（反轉訊號）
-        if not _is_green_k(row):
+        if not is_green_k(row):
             continue
 
-        # 條件 5：收盤價跌破 MA
         if row["close"] >= row["MA"]:
             continue
 
-        # 取得日期
         signal_date = row["date"]
         if isinstance(signal_date, pd.Timestamp):
             signal_date = signal_date.date()
+        elif isinstance(signal_date, str):
+            signal_date = pd.to_datetime(signal_date).date()
 
         details = (
             f"賣出訊號：連續 {red_count} 根紅 K 後出現綠 K 反轉，"
@@ -280,23 +276,7 @@ def detect_all_signals(
     ma_period: int = MA_PERIOD,
 ) -> list[SignalResult]:
     """
-    偵測所有訊號（買進 + 賣出）
-
-    會自動計算所有必要的技術指標與趨勢分析。
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        原始股價 DataFrame（至少需要 date, open, high, low, close, volume, stock_id）
-    consecutive_k : int
-        最少連續 K 棒數量
-    ma_period : int
-        均線週期
-
-    Returns
-    -------
-    list[SignalResult]
-        所有偵測到的訊號，按日期排序
+    偵測所有訊號（買進 + 賣出）(高效 dict 記錄優化版)
     """
     if df.empty:
         return []

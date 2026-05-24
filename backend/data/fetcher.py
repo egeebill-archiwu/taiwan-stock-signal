@@ -11,7 +11,7 @@ from typing import Optional
 import pandas as pd
 import yfinance as yf
 
-from backend.config import DEFAULT_FETCH_PERIOD, TWSE_SUFFIX
+from backend.config import DEFAULT_FETCH_PERIOD, TWSE_SUFFIX, TPEX_SUFFIX
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +20,17 @@ def _to_yahoo_ticker(stock_id: str) -> str:
     """
     將股票代號轉換為 Yahoo Finance 格式
 
-    若已包含 .TW 或 .TWO 後綴則直接回傳，否則預設加上 .TW。
+    若已包含 .TW 或 .TWO 後綴則直接回傳，否則預設加上 .TW（上櫃則加上 .TWO）。
     """
     stock_id = stock_id.strip()
     if stock_id.upper().endswith(".TW") or stock_id.upper().endswith(".TWO"):
         return stock_id
+    
+    # 台灣主要市值前 100 大中的上櫃股票 (TPEX)
+    otc_stocks = {"3529", "4743", "5347", "6488", "6547", "8069"}
+    if stock_id in otc_stocks:
+        return f"{stock_id}{TPEX_SUFFIX}"
+        
     return f"{stock_id}{TWSE_SUFFIX}"
 
 
@@ -189,7 +195,8 @@ def get_all_twse_stock_ids() -> list[str]:
         "2883",  # 開發金
         "2892",  # 第一金
         "5880",  # 合庫金
-        "2888",  # 新光金
+        "2888",  # 新光金 (保留) / 2324 仁寶
+        "2324",  # 仁寶
         "5876",  # 上海商銀
         "2889",  # 國票金
         # ===== 傳統產業 =====
@@ -297,7 +304,7 @@ def get_stock_name(stock_id: str) -> str:
         "2881": "富邦金", "2882": "國泰金", "2891": "中信金", "2886": "兆豐金",
         "2884": "玉山金", "2885": "元大金", "2887": "台新金", "2890": "永豐金",
         "2880": "華南金", "2883": "開發金", "2892": "第一金", "5880": "合庫金",
-        "2888": "新光金", "5876": "上海商銀", "2889": "國票金", "2002": "中鋼",
+        "2888": "新光金", "2324": "仁寶", "5876": "上海商銀", "2889": "國票金", "2002": "中鋼",
         "1301": "台塑", "1303": "南亞", "1326": "台化", "6505": "台塑化",
         "1101": "台泥", "1102": "亞泥", "1216": "統一", "2912": "統一超",
         "1476": "儒鴻", "9910": "豐泰", "2207": "和泰車", "9921": "巨大",
