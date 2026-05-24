@@ -26,7 +26,9 @@ const App = (() => {
       '2884': '玉山金', '2357': '華碩', '2382': '廣達',
       '6505': '台塑化', '2892': '第一金', '2379': '瑞昱',
       '2395': '研華', '2408': '南亞科', '2474': '可成',
-      '3045': '台灣大', '4904': '遠傳', '6415': '矽力-KY'
+      '3045': '台灣大', '4904': '遠傳', '6415': '矽力-KY',
+      '2603': '長榮', '2609': '陽明', '2615': '萬海',
+      '3231': '緯創', '2353': '宏碁'
     },
     apiConnected: false,
     dashboardSignals: []
@@ -144,6 +146,7 @@ const App = (() => {
     switch (page) {
       case 'dashboard': initDashboard(); break;
       case 'screener': if (typeof Screener !== 'undefined') Screener.init(); break;
+      case 'analysis': if (typeof Analysis !== 'undefined') Analysis.init(); break;
       case 'backtest': if (typeof Backtest !== 'undefined') Backtest.init(); break;
       case 'journal': if (typeof Journal !== 'undefined') Journal.init(); break;
       case 'settings': initSettings(); break;
@@ -441,10 +444,10 @@ const App = (() => {
   // ---- Settings Page ----
   function initSettings() {
     const s = state.settings;
-    // 如果沒有儲存發 API 網址，則根據當前網域自動推導預設值
-    const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    // 如果沒有儲存發 API 網址，則根據當前網域自動推導預設值，支援本地 file:// 協議
+    const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
       ? 'http://localhost:8000'
-      : window.location.origin;
+      : (window.location.origin === 'null' ? 'http://localhost:8000' : window.location.origin);
 
     setVal('set-api-url', s.apiUrl !== undefined ? s.apiUrl : defaultApiUrl);
     setVal('set-active-strategy', s.activeStrategy || 'bb');
@@ -471,19 +474,20 @@ const App = (() => {
     // 動態判斷 API Base URL，避免手機或雲端連線到錯誤的 localhost
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
+    const isFileProtocol = window.location.protocol === 'file:';
 
     if (state.settings.apiUrl) {
       const url = state.settings.apiUrl;
       const isUrlLocal = url.includes('localhost') || url.includes('127.0.0.1');
 
-      if (!isLocalhost && isUrlLocal) {
-        // 如果是在行動裝置或雲端存取，但設定值是 localhost，則忽略設定改用相對路徑
+      if (!isLocalhost && isUrlLocal && !isFileProtocol) {
+        // 如果是在行動裝置或雲端存取（且非本地檔案），但設定值是 localhost，則忽略設定改用相對路徑
         CONFIG.apiBase = '';
       } else {
         CONFIG.apiBase = url;
       }
     } else {
-      CONFIG.apiBase = '';
+      CONFIG.apiBase = isFileProtocol ? 'http://localhost:8000' : '';
     }
   }
 
@@ -524,12 +528,13 @@ const Settings = (() => {
     };
     App.state.settings = settings;
 
-    // 動態設定 CONFIG.apiBase，防止在非本機環境下存取 localhost
+    // 動態設定 CONFIG.apiBase，防止在非本機環境下存取 localhost，並相容本地 file:// 協議
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '0.0.0.0';
     const isUrlLocal = settings.apiUrl.includes('localhost') || settings.apiUrl.includes('127.0.0.1');
+    const isFileProtocol = window.location.protocol === 'file:';
 
-    if (!isLocalhost && isUrlLocal) {
+    if (!isLocalhost && isUrlLocal && !isFileProtocol) {
       App.CONFIG.apiBase = '';
     } else {
       App.CONFIG.apiBase = settings.apiUrl;
@@ -545,9 +550,9 @@ const Settings = (() => {
     localStorage.removeItem('bb-api-url');
     App.state.settings = {};
     
-    const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    const defaultApiUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
       ? 'http://localhost:8000'
-      : window.location.origin;
+      : (window.location.origin === 'null' ? 'http://localhost:8000' : window.location.origin);
 
     setVal('set-api-url', defaultApiUrl);
     setVal('set-active-strategy', 'bb');
@@ -563,7 +568,7 @@ const Settings = (() => {
     document.getElementById('set-candle-convention').value = 'TW';
     document.getElementById('set-chart-period').value = 90;
     
-    App.CONFIG.apiBase = ''; // 重置為預設相對路徑
+    App.CONFIG.apiBase = window.location.protocol === 'file:' ? 'http://localhost:8000' : ''; // 重置為預設路徑，支援本地 file:// 協議
     App.toast('設定已重置', 'info');
   }
 
@@ -616,7 +621,7 @@ const Analysis = (() => {
     const name = App.state.stocks[cleanCode] || `${cleanCode}`;
 
     currentStock = { code: cleanCode, name };
-    document.getElementById('analysis-search').value = `${cleanCode} ${name}`;
+    document.getElementById('analysis-search').value = name === cleanCode ? cleanCode : `${cleanCode} ${name}`;
 
     App.toast(`載入 ${cleanCode} ${name} 中...`, 'info');
 
@@ -1046,5 +1051,11 @@ const Analysis = (() => {
     }
   });
 
-  return { searchStock, loadStock, runAiAnalysis };
+  function init() {
+    if (!currentStock) {
+      loadStock('2330');
+    }
+  }
+
+  return { init, searchStock, loadStock, runAiAnalysis };
 })();
