@@ -181,15 +181,27 @@ async def get_stock_data(
     回傳包含布林通道、均線、帶寬、趨勢判斷、KD/MACD/RSI及法人籌碼的完整資料。
     """
     try:
-        df = fetch_stock_data(stock_id, period=period, start=start, end=end)
+        # 1. 調整抓取區間以解決技術指標（例如 60MA, 20MA）的 warm-up 與資料量不足問題
+        fetch_period = period
+        if period in ["1mo", "3mo"]:
+            fetch_period = "6mo"  # 確保計算 60MA 有足夠的歷史資料
+            
+        df = fetch_stock_data(stock_id, period=fetch_period, start=start, end=end)
         if df.empty:
             raise HTTPException(
                 status_code=404,
                 detail=f"找不到 {stock_id} 的股價資料"
             )
  
-        # 計算所有指標
+        # 2. 計算所有指標
         df = prepare_dataframe_with_indicators(df, token=token, strategy=strategy)
+
+        # 3. 如果是 1mo 或 3mo，將計算好的指標結果進行資料切片，只回傳對應天數
+        if period in ["1mo", "3mo"] and not df.empty:
+            # 1mo 約 22 個交易日，保留 30 筆；3mo 約 62 個交易日，保留 90 筆
+            days_map = {"1mo": 30, "3mo": 90}
+            limit_days = days_map.get(period, 90)
+            df = df.tail(limit_days).reset_index(drop=True)
 
         # 轉為 JSON 格式，確保 NaN/Inf 轉為 None
         records = df.copy()
@@ -392,7 +404,12 @@ async def get_stock_signals(
     依據布林通道策略偵測買進與賣出訊號。
     """
     try:
-        df = fetch_stock_data(stock_id, period=period)
+        # 1. 調整抓取區間以解決 60MA/20MA 計算時 warm-up 與資料量不足的問題
+        fetch_period = period
+        if period in ["1mo", "3mo"]:
+            fetch_period = "6mo"  # 確保有足夠的歷史資料來偵測均線糾結訊號
+            
+        df = fetch_stock_data(stock_id, period=fetch_period)
         if df.empty:
             raise HTTPException(
                 status_code=404,
@@ -404,6 +421,13 @@ async def get_stock_signals(
             signals = detect_ma_signals(df)
         else:
             signals = detect_all_signals(df, consecutive_k=consecutive_k)
+
+        # 2. 如果是 1mo 或 3mo，過濾掉超過時間範圍的歷史訊號
+        if period in ["1mo", "3mo"] and signals:
+            from datetime import date, timedelta
+            days_map = {"1mo": 30, "3mo": 90}
+            limit_date = date.today() - timedelta(days=days_map.get(period, 90))
+            signals = [s for s in signals if s.date >= limit_date]
 
         return {
             "stock_id": stock_id,

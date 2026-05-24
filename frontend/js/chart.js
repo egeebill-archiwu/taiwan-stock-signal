@@ -94,13 +94,14 @@ const StockChart = (() => {
 
       let y1, y2, textY;
       if (isBuy) {
-        // BUY: Green vertical dashed line from below candle to bottom
+        // BUY: Green vertical dashed line from below candle to bottom, above volume area
         const yLow = candleSeries.priceToCoordinate(candle.low);
         if (yLow === null) return;
         
         y1 = yLow + 12; // offset below arrow
-        y2 = chartHeight - 45; // end above time scale
-        textY = chartHeight - 32; // text near bottom
+        textY = chartHeight * 0.78; // place label above the bottom 15% volume area
+        y2 = textY - 8; // line ends just above label
+        y2 = Math.max(y2, y1 + 10); // ensure line goes downwards and is at least 10px long
       } else {
         // SELL: Red vertical dashed line from above candle to top
         const yHigh = candleSeries.priceToCoordinate(candle.high);
@@ -108,7 +109,9 @@ const StockChart = (() => {
         
         y1 = yHigh - 12; // offset above arrow
         y2 = 30; // end near top
-        textY = 18; // text near top
+        y2 = Math.min(y2, y1 - 10); // ensure line goes upwards and is at least 10px long
+        textY = y2 - 12; // text placed above line
+        textY = Math.max(textY, 12); // prevent top cutoff
       }
 
       // Draw background rect for readability
