@@ -181,85 +181,23 @@ def screen_stocks(
     cutoff_date = date.today() - timedelta(days=lookback_days)
     total = len(stock_ids)
 
-    logger.info(f"開始批次下載與篩選市場... 總共 {total} 檔股票")
+    logger.info(f"開始多執行緒下載與篩選市場... 總共 {total} 檔股票")
     t_start = time.time()
 
-    # 取得 Yahoo Tickers
-    tickers = [_to_yahoo_ticker(sid) for sid in stock_ids]
-
-    # 執行批次下載
-    import yfinance as yf
-    try:
-        df_all = yf.download(tickers, period=period, group_by="ticker", auto_adjust=True, threads=True, progress=False)
-        logger.info(f"yfinance 批次下載完成，耗時: {time.time() - t_start:.2f} 秒")
-        # 檢查是否下載到空資料或全 NaN 資料 (例如在 Render 上遭 Yahoo Finance 阻擋)
-        if df_all.empty or df_all.dropna(how="all").empty or (hasattr(df_all, "columns") and len(df_all.columns) == 0):
-            raise ValueError("yf.download 回傳空資料或所有數值皆為 NaN (可能遭 Yahoo 阻擋)")
-    except Exception as e:
-        logger.error(f"yfinance 批次下載失敗，切換為執行緒模式: {e}")
-        # fallback to ThreadPoolExecutor
-        max_workers = 15
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_sid = {
-                executor.submit(_screen_single_stock, sid, period, cutoff_date, strategy): sid
-                for sid in stock_ids
-            }
-            for future in concurrent.futures.as_completed(future_to_sid):
-                sid = future_to_sid[future]
-                try:
-                    stock_results = future.result()
-                    results.extend(stock_results)
-                except Exception as ex:
-                    logger.error(f"執行緒模式掃描 {sid} 失敗: {ex}")
-        
-        results.sort(key=lambda r: r.signal_date, reverse=True)
-        if stock_ids == get_all_twse_stock_ids():
-            _screener_cache["timestamp"] = current_time
-            _screener_cache["results"] = results
-            _screener_cache["lookback_days"] = lookback_days
-            _screener_cache["period"] = period
-            _screener_cache["strategy"] = strategy
-        return results
-
-    # 批次下載成功，開始在記憶體中處理資料
-    for sid in stock_ids:
-        ticker = _to_yahoo_ticker(sid)
-        try:
-            if hasattr(df_all.columns, "levels") and ticker in df_all.columns.levels[0]:
-                df_single = df_all[ticker].copy()
-            elif ticker in df_all.columns:
-                df_single = df_all.copy()
-            else:
-                continue
-                
-            if df_single.empty or df_single.dropna(how="all").empty:
-                continue
-                
-            df_single = df_single.reset_index()
-            df_single = df_single.rename(columns={
-                "Date": "date",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Close": "close",
-                "Volume": "volume",
-            })
-            
-            required_cols = ["date", "open", "high", "low", "close", "volume"]
-            if not all(col in df_single.columns for col in required_cols):
-                continue
-                
-            df_single = df_single[required_cols].copy()
-            df_single["date"] = pd.to_datetime(df_single["date"]).dt.tz_localize(None).dt.normalize()
-            df_single["stock_id"] = sid.replace(".TW", "").replace(".TWO", "")
-            df_single = df_single.dropna(subset=["open", "high", "low", "close"])
-            df_single = df_single.sort_values("date").reset_index(drop=True)
-            
-            # 計算訊號
-            stock_results = _process_single_stock_df(sid, df_single, cutoff_date, strategy)
-            results.extend(stock_results)
-        except Exception as e:
-            logger.error(f"記憶體中處理 {sid} 資料失敗: {e}")
+    # 直接使用 ThreadPoolExecutor 進行並行下載與分析，以確保在所有環境（含 Render 雲端環境）皆能穩定且快速地運作
+    max_workers = 20  # 調高執行緒數量以加速雲端環境執行速度
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_sid = {
+            executor.submit(_screen_single_stock, sid, period, cutoff_date, strategy): sid
+            for sid in stock_ids
+        }
+        for future in concurrent.futures.as_completed(future_to_sid):
+            sid = future_to_sid[future]
+            try:
+                stock_results = future.result()
+                results.extend(stock_results)
+            except Exception as ex:
+                logger.error(f"執行緒模式掃描 {sid} 失敗: {ex}")
 
     # 按訊號日期降冪排序（最新的在前）
     results.sort(key=lambda r: r.signal_date, reverse=True)
