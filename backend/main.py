@@ -762,6 +762,15 @@ async def get_stock_list():
 # ============================================================
 # 偵錯 API (暫時)
 # ============================================================
+@app.get("/api/version", tags=["系統"])
+async def get_version():
+    import subprocess
+    try:
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+        return {"commit": commit}
+    except Exception as e:
+        return {"commit": "unknown", "error": str(e)}
+
 @app.get("/api/debug-yf", tags=["系統"])
 async def debug_yf():
     import yfinance as yf
@@ -786,7 +795,7 @@ async def debug_yf():
                     "shape": df_t.shape,
                     "empty": df_t.empty,
                     "dropna_empty": df_t.dropna(how="all").empty,
-                    "first_values": df_t.head(3).to_dict(orient="records") if not df_t.empty else []
+                    "first_values": json.loads(df_t.head(3).to_json(orient="records")) if not df_t.empty else []
                 }
             else:
                 ticker_details[t] = {"exists": False}
