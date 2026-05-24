@@ -68,6 +68,7 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  touch-action: pan-x pan-y; /* Disable browser-level pinch-zoom while keeping scroll/pan */
 }
 
 /* ---- Loading Screen ---- */
@@ -1661,4 +1662,33 @@ select.form-input option {
 .sidebar-backdrop.visible {
   opacity: 1;
   visibility: visible;
+}
+
+/* ---- Stock analysis page navigation and crosshair ---- */
+.nav-stock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  transition: var(--transition);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.nav-stock-btn:hover {
+  color: var(--cyan) !important;
+  transform: scale(1.15);
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+.nav-stock-btn:active {
+  transform: scale(0.92);
+}
+
+#analysis-crosshair-toggle {
+  transition: var(--transition);
+}
+#analysis-crosshair-toggle.active {
+  background: rgba(255, 171, 64, 0.15) !important;
+  border-color: var(--orange) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 0 12px rgba(255, 171, 64, 0.3) !important;
 }

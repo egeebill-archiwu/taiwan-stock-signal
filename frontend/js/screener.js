@@ -152,6 +152,12 @@ const Screener = (() => {
 
   function render() {
     const filtered = getFilteredData();
+    
+    // 儲存篩選後的股票 ID 列表，以利於「個股分析」頁面的左右鍵切換功能
+    if (App.state) {
+      App.state.screenerStockIds = filtered.map(item => item.stock_id);
+    }
+
     const tbody = document.getElementById('screener-tbody');
     const countBadge = document.getElementById('screener-count');
 

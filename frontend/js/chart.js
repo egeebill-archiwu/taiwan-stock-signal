@@ -197,8 +197,8 @@ const StockChart = (() => {
       },
       crosshair: {
         mode: LightweightCharts.CrosshairMode.Normal,
-        vertLine: { color: COLORS.crosshair, width: 1, style: 2, labelBackgroundColor: '#1a1f42' },
-        horzLine: { color: COLORS.crosshair, width: 1, style: 2, labelBackgroundColor: '#1a1f42' }
+        vertLine: { visible: false, color: COLORS.crosshair, width: 1, style: 2, labelBackgroundColor: '#1a1f42' },
+        horzLine: { visible: false, color: COLORS.crosshair, width: 1, style: 2, labelBackgroundColor: '#1a1f42' }
       },
       rightPriceScale: {
         borderColor: 'rgba(255, 255, 255, 0.06)',
@@ -209,8 +209,18 @@ const StockChart = (() => {
         timeVisible: false,
         dayVisible: true
       },
-      handleScroll: { vertTouchDrag: false },
-      handleScale: { axisPressedMouseMove: true }
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+        axisDoubleClickReset: true
+      }
     });
 
     // Candlestick series
@@ -610,6 +620,27 @@ const StockChart = (() => {
     updateCustomMarkers(chartObj);
   }
 
+  // ---- Set Crosshair Enabled ----
+  function setCrosshairEnabled(chartObj, enabled) {
+    if (!chartObj) return;
+    if (chartObj.chart) {
+      chartObj.chart.applyOptions({
+        crosshair: {
+          vertLine: { visible: enabled },
+          horzLine: { visible: enabled }
+        }
+      });
+    }
+    if (activeSubChart) {
+      activeSubChart.applyOptions({
+        crosshair: {
+          vertLine: { visible: enabled },
+          horzLine: { visible: enabled }
+        }
+      });
+    }
+  }
+
   // ---- Cleanup ----
   function destroy() {
     if (activeChart) {
@@ -641,6 +672,7 @@ const StockChart = (() => {
     addSignalMarkers,
     generateMockOHLC,
     destroy,
-    COLORS
+    COLORS,
+    setCrosshairEnabled
   };
 })();

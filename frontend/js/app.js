@@ -31,7 +31,8 @@ const App = (() => {
       '3231': '緯創', '2353': '宏碁'
     },
     apiConnected: false,
-    dashboardSignals: []
+    dashboardSignals: [],
+    screenerStockIds: []
   };
 
   // ---- Page Titles ----
@@ -740,6 +741,21 @@ const Analysis = (() => {
       // 繪製副圖表
       StockChart.renderSubChart('analysis-subchart-container', currentStockData, activeIndicator, chartInstance);
 
+      // 訂閱十字線移動事件以更新 OHLC 資訊列
+      chartInstance.chart.subscribeCrosshairMove(param => {
+        updateOhlcDisplay(param);
+      });
+
+      // 如果當前「查價線」按鈕為啟用狀態，確保新圖表同步開啟十字線
+      const crosshairToggle = document.getElementById('analysis-crosshair-toggle');
+      const isCrosshairEnabled = crosshairToggle && crosshairToggle.getAttribute('data-active') === 'true';
+      if (isCrosshairEnabled && typeof StockChart !== 'undefined') {
+        StockChart.setCrosshairEnabled(chartInstance, true);
+      }
+
+      // 初始化資訊列顯示最新一根 K 棒的數值
+      updateOhlcDisplay(null);
+
       // 更新均線圖例說明
       const legendEl = document.getElementById('analysis-ma-legend');
       if (legendEl) {
@@ -1046,7 +1062,7 @@ const Analysis = (() => {
     }
   }
 
-  // ── 切換時間區間 與 切換技術指標 ──────────────────────────────────────
+  // ── 切換時間區間、切換技術指標、查價線切換、左右切換股票 ──────────────────────
   document.addEventListener('click', (e) => {
     // 1. 切換時間區間
     const periodBtn = e.target.closest('#analysis-period-btns .btn-filter');
@@ -1058,10 +1074,26 @@ const Analysis = (() => {
       return;
     }
 
-    // 2. 切換技術指標
-    const indicatorBtn = e.target.closest('#analysis-indicator-toggles .btn-filter');
+    // 2. 查價線切換 (必須在一般指標切換前處理，以避免被誤判為指標按鈕)
+    const crosshairToggleBtn = e.target.closest('#analysis-crosshair-toggle');
+    if (crosshairToggleBtn) {
+      const isActive = crosshairToggleBtn.getAttribute('data-active') === 'true';
+      const newActive = !isActive;
+      crosshairToggleBtn.setAttribute('data-active', String(newActive));
+      crosshairToggleBtn.classList.toggle('active', newActive);
+      
+      if (chartInstance && typeof StockChart !== 'undefined') {
+        StockChart.setCrosshairEnabled(chartInstance, newActive);
+      }
+      
+      updateOhlcDisplay(null); // 重置為最新收盤價，或跟隨目前十字線狀態
+      return;
+    }
+
+    // 3. 切換技術指標 (排除查價線按鈕)
+    const indicatorBtn = e.target.closest('#analysis-indicator-toggles .btn-filter:not(#analysis-crosshair-toggle)');
     if (indicatorBtn) {
-      document.querySelectorAll('#analysis-indicator-toggles .btn-filter').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#analysis-indicator-toggles .btn-filter:not(#analysis-crosshair-toggle)').forEach(b => b.classList.remove('active'));
       indicatorBtn.classList.add('active');
       activeIndicator = indicatorBtn.dataset.indicator || 'volume';
       if (currentStockData) {
@@ -1069,7 +1101,136 @@ const Analysis = (() => {
       }
       return;
     }
+
+    // 4. 左右切換股票
+    const prevStockBtn = e.target.closest('#analysis-prev-stock');
+    if (prevStockBtn) {
+      navigateStock(-1);
+      return;
+    }
+    const nextStockBtn = e.target.closest('#analysis-next-stock');
+    if (nextStockBtn) {
+      navigateStock(1);
+      return;
+    }
   });
+
+  function navigateStock(direction) {
+    let stockIds = [];
+    if (App.state.screenerStockIds && App.state.screenerStockIds.length > 0) {
+      stockIds = App.state.screenerStockIds;
+    } else {
+      stockIds = Object.keys(App.state.stocks).sort();
+    }
+
+    if (!currentStock || stockIds.length === 0) return;
+
+    let currentIndex = stockIds.indexOf(currentStock.code);
+    if (currentIndex === -1) {
+      currentIndex = 0;
+    }
+
+    let newIndex = currentIndex + direction;
+    if (newIndex < 0) {
+      newIndex = stockIds.length - 1;
+    } else if (newIndex >= stockIds.length) {
+      newIndex = 0;
+    }
+
+    const nextCode = stockIds[newIndex];
+    loadStock(nextCode);
+  }
+
+  function updateOhlcDisplay(param) {
+    const ohlcDiv = document.getElementById('analysis-ohlc-info');
+    if (!ohlcDiv) return;
+
+    const crosshairToggle = document.getElementById('analysis-crosshair-toggle');
+    const isCrosshairEnabled = crosshairToggle && crosshairToggle.getAttribute('data-active') === 'true';
+
+    let candle = null;
+
+    if (isCrosshairEnabled && param && param.time && currentStockData) {
+      let timeStr = "";
+      if (typeof param.time === 'string') {
+        timeStr = param.time;
+      } else if (param.time.year !== undefined) {
+        timeStr = `${param.time.year}-${String(param.time.month).padStart(2, '0')}-${String(param.time.day).padStart(2, '0')}`;
+      }
+      if (timeStr) {
+        candle = currentStockData.find(c => c.date.substring(0, 10) === timeStr);
+      }
+    }
+
+    if (!candle && currentStockData && currentStockData.length > 0) {
+      candle = currentStockData[currentStockData.length - 1];
+    }
+
+    if (!candle) return;
+
+    const dateFormatted = candle.date.substring(0, 10).replace(/-/g, '/');
+    document.getElementById('ohlc-date').textContent = `日期: ${dateFormatted}`;
+    document.getElementById('ohlc-open').textContent = `開: ${candle.open.toFixed(2)}`;
+    document.getElementById('ohlc-high').textContent = `高: ${candle.high.toFixed(2)}`;
+    document.getElementById('ohlc-low').textContent = `低: ${candle.low.toFixed(2)}`;
+    document.getElementById('ohlc-close').textContent = `收: ${candle.close.toFixed(2)}`;
+
+    const idx = currentStockData.findIndex(c => c.date === candle.date);
+    let changeText = '--';
+    let changeClass = '';
+    
+    if (idx > 0) {
+      const prevClose = currentStockData[idx - 1].close;
+      const diff = candle.close - prevClose;
+      const pct = (diff / prevClose) * 100;
+      const isUp = diff >= 0;
+      const sign = isUp ? '▲' : '▼';
+      changeText = `${sign}${Math.abs(diff).toFixed(2)} (${isUp ? '+' : ''}${pct.toFixed(2)}%)`;
+      changeClass = isUp ? 'up' : 'down';
+    } else if (idx === 0) {
+      changeText = '0.00 (0.00%)';
+    }
+
+    const changeEl = document.getElementById('ohlc-change');
+    changeEl.textContent = changeText;
+    changeEl.className = `change-value ${changeClass}`;
+    
+    if (changeClass === 'up') {
+      changeEl.style.color = 'var(--red)';
+    } else if (changeClass === 'down') {
+      changeEl.style.color = 'var(--green)';
+    } else {
+      changeEl.style.color = 'var(--text-secondary)';
+    }
+
+    const indicatorEl = document.getElementById('ohlc-indicators');
+    if (indicatorEl) {
+      const isMaConv = App.state.settings.activeStrategy === 'ma_conv';
+      if (isMaConv) {
+        const ma5 = candle.MA5 ? candle.MA5.toFixed(2) : '--';
+        const ma10 = candle.MA10 ? candle.MA10.toFixed(2) : '--';
+        const ma20 = candle.MA20 ? candle.MA20.toFixed(2) : '--';
+        const ma60 = candle.MA60 ? candle.MA60.toFixed(2) : '--';
+        indicatorEl.innerHTML = `
+          <span style="color:#ff5252; margin-right:8px;">5MA:${ma5}</span>
+          <span style="color:#ff9100; margin-right:8px;">10MA:${ma10}</span>
+          <span style="color:#ffd700; margin-right:8px;">20MA:${ma20}</span>
+          <span style="color:#b388ff;">60MA:${ma60}</span>
+        `;
+      } else {
+        const upper = candle.BBU ? candle.BBU.toFixed(2) : '--';
+        const middle = candle.BBM ? candle.BBM.toFixed(2) : '--';
+        const lower = candle.BBL ? candle.BBL.toFixed(2) : '--';
+        const ma10 = candle.MA ? candle.MA.toFixed(2) : '--';
+        indicatorEl.innerHTML = `
+          <span style="color:#ff5252; margin-right:8px;">上軌:${upper}</span>
+          <span style="color:#ffd700; margin-right:8px;">中軌:${middle}</span>
+          <span style="color:#00e676; margin-right:8px;">下軌:${lower}</span>
+          <span style="color:#b388ff;">MA10:${ma10}</span>
+        `;
+      }
+    }
+  }
 
   function init() {
     if (!currentStock) {

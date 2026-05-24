@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#0a0e27">
   <meta name="description" content="台股布林/均線交易訊號系統 - 專業級技術分析平台">
   <title>台股布林/均線訊號系統 | Stock Signal System</title>
@@ -309,9 +309,11 @@
                 ← 返回
               </button>
               <div class="stock-info-main">
-                <div class="stock-name-group">
+                <div class="stock-name-group" style="display: flex; align-items: center; gap: 8px;">
+                  <button class="btn btn-sm btn-ghost nav-stock-btn" id="analysis-prev-stock" style="padding: 4px 8px; font-size: 1.15rem; color: var(--text-secondary); cursor: pointer; border: none; background: transparent; transition: var(--transition);">◀</button>
                   <span class="stock-code" id="analysis-code">2330</span>
                   <span class="stock-name" id="analysis-name">台積電</span>
+                  <button class="btn btn-sm btn-ghost nav-stock-btn" id="analysis-next-stock" style="padding: 4px 8px; font-size: 1.15rem; color: var(--text-secondary); cursor: pointer; border: none; background: transparent; transition: var(--transition);">▶</button>
                 </div>
                 <div class="stock-price-group">
                   <span class="stock-price" id="analysis-price">595.00</span>
@@ -339,7 +341,18 @@
                   </div>
                 </div>
               </div>
-              <div class="card-body">
+              <div class="card-body" style="position: relative;">
+                <!-- OHLC 資訊列 -->
+                <div class="ohlc-info-bar" id="analysis-ohlc-info" style="display: flex; gap: 12px; font-size: 0.78rem; color: var(--text-secondary); background: rgba(13, 19, 48, 0.4); padding: 6px 12px; border-radius: var(--radius-xs); border: 1px solid rgba(255, 255, 255, 0.03); margin-bottom: 8px; flex-wrap: wrap; align-items: center; min-height: 28px;">
+                  <span id="ohlc-date" style="font-weight: 600; color: var(--text-primary);">日期: --</span>
+                  <span id="ohlc-open">開: --</span>
+                  <span id="ohlc-high">高: --</span>
+                  <span id="ohlc-low">低: --</span>
+                  <span id="ohlc-close">收: --</span>
+                  <span id="ohlc-change" style="font-weight: 600;">--</span>
+                  <span id="ohlc-indicators" style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto;"></span>
+                </div>
+
                 <!-- 主 K 線圖 -->
                 <div class="chart-container" id="analysis-chart-container" style="height: 320px;"></div>
                 
@@ -347,7 +360,7 @@
                 <div class="chart-ma-legend" id="analysis-ma-legend" style="margin-top: 8px; margin-bottom: 8px; display: flex; gap: 10px; font-size: 0.72rem; color: var(--text-secondary); background: rgba(10, 14, 39, 0.85); padding: 5px 10px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.05); flex-wrap: wrap;"></div>
                 
                 <!-- 指標切換按鈕 -->
-                <div class="indicator-toggles" id="analysis-indicator-toggles" style="margin-top: 15px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap;">
+                <div class="indicator-toggles" id="analysis-indicator-toggles" style="margin-top: 15px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; width: 100%;">
                   <button class="btn btn-sm btn-filter active" data-indicator="volume">📊 成交量</button>
                   <button class="btn btn-sm btn-filter" data-indicator="kd">📈 KD 指標</button>
                   <button class="btn btn-sm btn-filter" data-indicator="macd">📊 MACD</button>
@@ -355,6 +368,9 @@
                   <button class="btn btn-sm btn-filter" data-indicator="foreign">外資買賣</button>
                   <button class="btn btn-sm btn-filter" data-indicator="trust">投信買賣</button>
                   <button class="btn btn-sm btn-filter" data-indicator="major_retail">大戶 vs 散戶</button>
+                  <button class="btn btn-sm btn-filter" id="analysis-crosshair-toggle" style="border-color: rgba(255, 171, 64, 0.4); color: var(--orange); margin-left: auto;" data-active="false">
+                    📌 查價線
+                  </button>
                 </div>
                 
                 <!-- 副指標圖表 -->
