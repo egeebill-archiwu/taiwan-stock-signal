@@ -620,6 +620,22 @@ const StockChart = (() => {
     updateCustomMarkers(chartObj);
   }
 
+  // ---- Get Visible Middle Candle ----
+  function getVisibleMiddleCandle(chartObj) {
+    if (!chartObj || !chartObj.chart || !chartObj.candles || chartObj.candles.length === 0) return null;
+    const timeScale = chartObj.chart.timeScale();
+    const logicalRange = timeScale.getVisibleLogicalRange();
+    if (!logicalRange) {
+      return chartObj.candles[Math.floor(chartObj.candles.length / 2)];
+    }
+    
+    const fromIndex = Math.max(0, Math.floor(logicalRange.from));
+    const toIndex = Math.min(chartObj.candles.length - 1, Math.ceil(logicalRange.to));
+    const midIndex = Math.floor((fromIndex + toIndex) / 2);
+    
+    return chartObj.candles[midIndex];
+  }
+
   // ---- Set Crosshair Enabled ----
   function setCrosshairEnabled(chartObj, enabled) {
     if (!chartObj) return;
@@ -630,6 +646,17 @@ const StockChart = (() => {
           horzLine: { visible: enabled }
         }
       });
+      
+      if (enabled) {
+        // Find visible middle candle and position crosshair there initially
+        const midCandle = getVisibleMiddleCandle(chartObj);
+        if (midCandle && chartObj.candleSeries) {
+          chartObj.chart.setCrosshairPosition(midCandle.close, midCandle.time, chartObj.candleSeries);
+        }
+      } else {
+        // Clear crosshair position
+        chartObj.chart.clearCrosshairPosition();
+      }
     }
     if (activeSubChart) {
       activeSubChart.applyOptions({
@@ -638,6 +665,9 @@ const StockChart = (() => {
           horzLine: { visible: enabled }
         }
       });
+      if (!enabled) {
+        activeSubChart.clearCrosshairPosition();
+      }
     }
   }
 

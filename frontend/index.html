@@ -343,14 +343,20 @@
               </div>
               <div class="card-body" style="position: relative;">
                 <!-- OHLC 資訊列 -->
-                <div class="ohlc-info-bar" id="analysis-ohlc-info" style="display: flex; gap: 12px; font-size: 0.78rem; color: var(--text-secondary); background: rgba(13, 19, 48, 0.4); padding: 6px 12px; border-radius: var(--radius-xs); border: 1px solid rgba(255, 255, 255, 0.03); margin-bottom: 8px; flex-wrap: wrap; align-items: center; min-height: 28px;">
-                  <span id="ohlc-date" style="font-weight: 600; color: var(--text-primary);">日期: --</span>
-                  <span id="ohlc-open">開: --</span>
-                  <span id="ohlc-high">高: --</span>
-                  <span id="ohlc-low">低: --</span>
-                  <span id="ohlc-close">收: --</span>
-                  <span id="ohlc-change" style="font-weight: 600;">--</span>
-                  <span id="ohlc-indicators" style="display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto;"></span>
+                <div class="ohlc-info-bar" id="analysis-ohlc-info" style="display: flex; flex-direction: column; gap: 4px; font-size: 0.76rem; color: var(--text-secondary); background: rgba(13, 19, 48, 0.45); padding: 8px 12px; border-radius: var(--radius-xs); border: 1px solid rgba(255, 255, 255, 0.04); margin-bottom: 8px;">
+                  <!-- 第一列：日期與 OHLC 價格 -->
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap; font-weight: 500;">
+                    <span id="ohlc-date" style="font-weight: 600; color: var(--text-primary); margin-right: 4px;">日期: --</span>
+                    <span id="ohlc-open">開: --</span>
+                    <span id="ohlc-high">高: --</span>
+                    <span id="ohlc-low">低: --</span>
+                    <span id="ohlc-close">收: --</span>
+                  </div>
+                  <!-- 第二列：漲跌與指標數值 -->
+                  <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.72rem;">
+                    <span id="ohlc-change" style="font-weight: 600; margin-right: 8px;">--</span>
+                    <span id="ohlc-indicators" style="display: flex; gap: 8px; flex-wrap: wrap;"></span>
+                  </div>
                 </div>
 
                 <!-- 主 K 線圖 -->

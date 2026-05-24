@@ -1086,7 +1086,9 @@ const Analysis = (() => {
         StockChart.setCrosshairEnabled(chartInstance, newActive);
       }
       
-      updateOhlcDisplay(null); // 重置為最新收盤價，或跟隨目前十字線狀態
+      if (!newActive) {
+        updateOhlcDisplay(null); // 關閉查價線時才重置為最新收盤價
+      }
       return;
     }
 
