@@ -192,6 +192,9 @@ def screen_stocks(
     try:
         df_all = yf.download(tickers, period=period, group_by="ticker", auto_adjust=True, threads=True, progress=False)
         logger.info(f"yfinance 批次下載完成，耗時: {time.time() - t_start:.2f} 秒")
+        # 檢查是否下載到空資料或全 NaN 資料 (例如在 Render 上遭 Yahoo Finance 阻擋)
+        if df_all.empty or df_all.dropna(how="all").empty or (hasattr(df_all, "columns") and len(df_all.columns) == 0):
+            raise ValueError("yf.download 回傳空資料或所有數值皆為 NaN (可能遭 Yahoo 阻擋)")
     except Exception as e:
         logger.error(f"yfinance 批次下載失敗，切換為執行緒模式: {e}")
         # fallback to ThreadPoolExecutor
