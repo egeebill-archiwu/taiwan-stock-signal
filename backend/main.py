@@ -760,6 +760,51 @@ async def get_stock_list():
 
 
 # ============================================================
+# 偵錯 API (暫時)
+# ============================================================
+@app.get("/api/debug-yf", tags=["系統"])
+async def debug_yf():
+    import yfinance as yf
+    import pandas as pd
+    tickers = ["2330.TW", "2454.TW", "3529.TWO", "6409.TWO"]
+    try:
+        df_all = yf.download(tickers, period="6mo", group_by="ticker", auto_adjust=True, threads=True, progress=False)
+        is_empty = df_all.empty
+        dropna_empty = df_all.dropna(how="all").empty
+        cols = list(df_all.columns)
+        first_cols = cols[:10] if cols else []
+        col_type = str(type(df_all.columns))
+        levels = list(df_all.columns.levels[0]) if hasattr(df_all.columns, "levels") else []
+        
+        # 檢查各個 ticker 在 df_all 中的資料量與 NaN 比例
+        ticker_details = {}
+        for t in tickers:
+            if hasattr(df_all.columns, "levels") and t in df_all.columns.levels[0]:
+                df_t = df_all[t]
+                ticker_details[t] = {
+                    "exists": True,
+                    "shape": df_t.shape,
+                    "empty": df_t.empty,
+                    "dropna_empty": df_t.dropna(how="all").empty,
+                    "first_values": df_t.head(3).to_dict(orient="records") if not df_t.empty else []
+                }
+            else:
+                ticker_details[t] = {"exists": False}
+                
+        return {
+            "df_all_shape": df_all.shape,
+            "is_empty": is_empty,
+            "dropna_empty": dropna_empty,
+            "col_type": col_type,
+            "columns_len": len(cols),
+            "first_columns": [str(c) for c in first_cols],
+            "levels_first_10": levels[:10],
+            "ticker_details": ticker_details
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+# ============================================================
 # 啟動入口
 # ============================================================
 if __name__ == "__main__":
