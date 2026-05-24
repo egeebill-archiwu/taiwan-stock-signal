@@ -340,8 +340,11 @@
                 </div>
               </div>
               <div class="card-body">
-                <!-- 主 K 線圖 -->
-                <div class="chart-container" id="analysis-chart-container" style="height: 320px;"></div>
+                <!-- 主 K 線圖與均線圖例 -->
+                <div style="position: relative;">
+                  <div class="chart-container" id="analysis-chart-container" style="height: 320px;"></div>
+                  <div class="chart-ma-legend" id="analysis-ma-legend" style="position: absolute; bottom: 42px; left: 15px; z-index: 6; display: flex; gap: 10px; font-size: 0.72rem; color: var(--text-secondary); background: rgba(10, 14, 39, 0.85); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.05); pointer-events: none; flex-wrap: wrap;"></div>
+                </div>
                 
                 <!-- 指標切換按鈕 -->
                 <div class="indicator-toggles" id="analysis-indicator-toggles" style="margin-top: 15px; margin-bottom: 10px; display: flex; gap: 8px; flex-wrap: wrap;">

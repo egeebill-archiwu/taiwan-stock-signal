@@ -64,11 +64,97 @@ const StockChart = (() => {
     return { candles };
   }
 
+  // ---- Update Custom Markers (Vertical Dashed Lines & Labels) ----
+  function updateCustomMarkers(chartObj) {
+    if (!chartObj || !chartObj.chart || !chartObj.containerId) return;
+    const container = document.getElementById(chartObj.containerId);
+    if (!container) return;
+    const svg = container.querySelector('.chart-overlay-svg');
+    if (!svg) return;
+
+    svg.innerHTML = ''; // Clear previous
+
+    const { chart, candleSeries, signals, candles } = chartObj;
+    if (!signals || signals.length === 0 || !candles || candles.length === 0) return;
+
+    const chartWidth = container.clientWidth;
+    const chartHeight = container.clientHeight || 450;
+
+    signals.forEach(s => {
+      const timeStr = s.time;
+      const x = chart.timeScale().timeToCoordinate(timeStr);
+      if (x === null || x < 0 || x > chartWidth) return;
+
+      const candle = candles.find(c => c.time === timeStr);
+      if (!candle) return;
+
+      const isBuy = s.shape === 'arrowUp';
+      const color = isBuy ? '#00e676' : '#ff5252';
+      const text = isBuy ? '訊號' : '賣出';
+
+      let y1, y2, textY;
+      if (isBuy) {
+        // BUY: Green vertical dashed line from below candle to bottom
+        const yLow = candleSeries.priceToCoordinate(candle.low);
+        if (yLow === null) return;
+        
+        y1 = yLow + 12; // offset below arrow
+        y2 = chartHeight - 45; // end above time scale
+        textY = chartHeight - 32; // text near bottom
+      } else {
+        // SELL: Red vertical dashed line from above candle to top
+        const yHigh = candleSeries.priceToCoordinate(candle.high);
+        if (yHigh === null) return;
+        
+        y1 = yHigh - 12; // offset above arrow
+        y2 = 30; // end near top
+        textY = 18; // text near top
+      }
+
+      // Draw background rect for readability
+      const textBg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      const bgWidth = isBuy ? 32 : 40;
+      const bgHeight = 16;
+      textBg.setAttribute("x", x - bgWidth / 2);
+      textBg.setAttribute("y", textY - 12);
+      textBg.setAttribute("width", bgWidth);
+      textBg.setAttribute("height", bgHeight);
+      textBg.setAttribute("fill", "rgba(10, 14, 39, 0.9)");
+      textBg.setAttribute("rx", "3");
+      textBg.setAttribute("ry", "3");
+      svg.appendChild(textBg);
+
+      // Draw text label
+      const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      textEl.setAttribute("x", x);
+      textEl.setAttribute("y", textY);
+      textEl.setAttribute("fill", color);
+      textEl.setAttribute("text-anchor", "middle");
+      textEl.setAttribute("font-size", "11");
+      textEl.setAttribute("font-weight", "bold");
+      textEl.textContent = text;
+      svg.appendChild(textEl);
+
+      // Draw vertical dashed line
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", x);
+      line.setAttribute("y1", y1);
+      line.setAttribute("x2", x);
+      line.setAttribute("y2", isBuy ? textY - 12 : textY + 4);
+      line.setAttribute("stroke", color);
+      line.setAttribute("stroke-width", "1");
+      line.setAttribute("stroke-dasharray", "3,3");
+      line.setAttribute("opacity", "0.75");
+      svg.appendChild(line);
+    });
+  }
+
   // ---- Create Stock Chart ----
   function createStockChart(containerId, data) {
     const container = document.getElementById(containerId);
     if (!container) return null;
     container.innerHTML = '';
+    container.style.position = 'relative'; // Ensure relative positioning for absolute child overlay
 
     // Clean up previous
     if (activeChart) {
@@ -143,6 +229,20 @@ const StockChart = (() => {
     }));
     volumeSeries.setData(volumeData);
 
+    // Create SVG overlay for custom markers (vertical dashed lines & text labels)
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "chart-overlay-svg");
+    svg.style.position = 'absolute';
+    svg.style.top = '0';
+    svg.style.left = '0';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    svg.style.pointerEvents = 'none';
+    svg.style.zIndex = '5';
+    container.appendChild(svg);
+
+    const chartObj = { chart, candleSeries, volumeSeries, containerId, candles: data, signals: [] };
+
     // Fit content
     chart.timeScale().fitContent();
 
@@ -156,14 +256,21 @@ const StockChart = (() => {
           chart.timeScale().fitContent();
         }
         lastWidth = width;
+        // Redraw custom markers on resize
+        updateCustomMarkers(chartObj);
       }
     });
     resizeObserver.observe(container);
 
+    // Subscribe to timescale visible range change to redraw overlay in real-time
+    chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      updateCustomMarkers(chartObj);
+    });
+
     activeChart = chart;
     activeCandleSeries = candleSeries;
 
-    return { chart, candleSeries, volumeSeries };
+    return chartObj;
   }
 
   // ---- Render Sub Chart for Indicators ----
@@ -476,9 +583,15 @@ const StockChart = (() => {
       position: m.position || (m.shape === 'arrowUp' ? 'belowBar' : 'aboveBar'),
       color: m.color || (m.shape === 'arrowUp' ? '#00e676' : '#ff5252'),
       shape: m.shape || 'arrowUp',
-      text: m.text || '',
+      text: '', // 禁用內建文字渲染，改用我們自訂的 SVG 垂直虛線與標記
       size: 1.5
     })));
+
+    // 儲存訊號資訊於圖表物件中，供後續繪製自訂排版使用
+    chartObj.signals = sorted;
+
+    // 立即更新自訂標記繪製
+    updateCustomMarkers(chartObj);
   }
 
   // ---- Cleanup ----

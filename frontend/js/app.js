@@ -739,6 +739,26 @@ const Analysis = (() => {
 
       // 繪製副圖表
       StockChart.renderSubChart('analysis-subchart-container', currentStockData, activeIndicator, chartInstance);
+
+      // 更新均線圖例說明
+      const legendEl = document.getElementById('analysis-ma-legend');
+      if (legendEl) {
+        if (isMaConv) {
+          legendEl.innerHTML = `
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#ff5252; border-radius:1px;"></span> 日均線 (5MA)</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#ff9100; border-radius:1px;"></span> 週均線 (10MA)</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#ffd700; border-radius:1px;"></span> 月均線 (20MA)</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#b388ff; border-radius:1px;"></span> 季均線 (60MA)</div>
+          `;
+        } else {
+          legendEl.innerHTML = `
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#ff5252; border-radius:1px; border-top:1px dashed #ff5252;"></span> 上軌 (BBU)</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#ffd700; border-radius:1px;"></span> 中軌 (MA20)</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#00e676; border-radius:1px; border-top:1px dashed #00e676;"></span> 下軌 (BBL)</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:3px; background:#b388ff; border-radius:1px;"></span> MA10</div>
+          `;
+        }
+      }
     }
 
     // ── 更新布林指標數值 ──
